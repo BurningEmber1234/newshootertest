@@ -1,0 +1,15 @@
+{
+  "name": "rift-strike",
+  "version": "0.4.7",
+  "private": true,
+  "description": "RIFT//STRIKE — a self-contained browser-based tactical FPS prototype.",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "preview": "node server.js",
+    "build": "node scripts/build.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
