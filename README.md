@@ -1,8 +1,19 @@
 # RIFT//STRIKE
 
-A self-contained browser-based tactical FPS prototype. Fight a 5v5 match on **Dustline Depot**, choose Counter-Terrorists or Terrorists, and take on squads of bots that move, aim, shoot, and respawn. Create or join an online room with a short code to play alongside another person.
+A self-contained browser-based tactical FPS prototype. Fight a 5v5 match on **Ascent**, a bright hillside town with a wide A site, a central mid courtyard and a B site, choose Counter-Terrorists or Terrorists, and take on squads of bots that move, aim, shoot, and respawn. Create or join an online room with a short code to play alongside another person.
 
 The browser client and multiplayer server use plain JavaScript and Node's standard library; there are no third-party runtime dependencies.
+
+## The map
+
+**Ascent** is a sun-washed hillside town inspired by Valorant's Ascent, laid out around a central mid courtyard:
+
+- **A site** (west) — entered from A main or the raised A short, with wine, rafters, and a garden behind it.
+- **B site** (east) — fed by B main, mid market, and the boat house side room.
+- **Mid** — mid top, catwalk, courtyard, and mid bottom connect both halves of the map.
+- **Spawns** — attackers start on the north side of town, defenders on the south, each with five spawn points.
+
+Both teams are split across A and B by the bots, so pushes and rotations happen on both sites instead of one central brawl.
 
 ## Run locally
 
@@ -43,4 +54,4 @@ Copies the client files into `dist/`. The exported static site can be hosted any
 - **Space** — vault / hop
 - **Esc** — close a menu, pause, or resume
 
-Matches are first-to-15 team eliminations. Start with a Vandal, Classic sidearm, $2,000, and partial armor; earn credits for eliminations and buy a Marshal or full Kevlar in the field armory. Bots navigate the depot, reposition in fights, aim, fire, and respawn. The live tactical map shows both teams and sites A/B.
+Matches are first-to-15 team eliminations. Start with a Vandal, Classic sidearm, $2,000, and partial armor; earn credits for eliminations and buy a Marshal or full Kevlar in the field armory. Bots push either site, rotate when a lane goes quiet, reposition in fights, aim, fire, and respawn. The live tactical map shows both teams, both sites, and the lane callouts (A main, mid, market, boat house, and more).

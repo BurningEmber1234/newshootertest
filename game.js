@@ -9,7 +9,8 @@
   const SCORE_LIMIT = 15;
   const STARTING_CASH = 2000, ARMOR_PRICE = 650, ARMOR_CAP = 50, KILL_REWARD = 300;
   const TEAM_COLORS = { CT: '#63c2ed', T: '#f08466' };
-  const player = { x: 3.3, y: 2.5, angle: 0.02, health: 100, armor: 25, ammo: 30, reserve: 90, money: STARTING_CASH, team: 'CT', alive: true, kills: 0, deaths: 0, weaponIndex: 1 };
+  const spawnFacing = MAP.spawnFacing;
+  const player = { x: MAP.spawns.CT[0][0], y: MAP.spawns.CT[0][1], angle: spawnFacing.CT, health: 100, armor: 25, ammo: 30, reserve: 90, money: STARTING_CASH, team: 'CT', alive: true, kills: 0, deaths: 0, weaponIndex: 1 };
   let weaponIndex = 1;
   let weaponStock = createWeaponStock();
   let bots = [], remoteActors = [], keys = {}, chosenTeam = 'CT';
@@ -50,7 +51,7 @@
     let sideX = (dx < 0 ? player.x - mx : mx + 1 - player.x) * ddx;
     let sideY = (dy < 0 ? player.y - my : my + 1 - player.y) * ddy;
     let side = 0, steps = 0;
-    while (steps++ < 52) {
+    while (steps++ < 128) {
       if (sideX < sideY) { sideX += ddx; mx += sx; side = 0; }
       else { sideY += ddy; my += sy; side = 1; }
       if (mx < 0 || my < 0 || mx >= W || my >= H || map[my][mx]) break;
@@ -59,19 +60,99 @@
     const distance = Math.max(0.04, rawDistance * Math.cos(angle - player.angle));
     const type = mx >= 0 && my >= 0 && mx < W && my < H ? map[my][mx] : 1;
     const hit = side === 0 ? player.y + rawDistance * dy : player.x + rawDistance * dx;
-    return { dist: distance, side, type, tex: hit - Math.floor(hit) };
+    return { dist: distance, side, type, tex: hit - Math.floor(hit), tileX: mx, tileY: my };
+  }
+
+  function drawSky() {
+    const horizon = viewH * 0.5;
+    const sky = ctx.createLinearGradient(0, 0, 0, horizon);
+    sky.addColorStop(0, '#3b88c9'); sky.addColorStop(0.42, '#7db9e0');
+    sky.addColorStop(0.78, '#cfe1e4'); sky.addColorStop(1, '#f2e3c4');
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, viewW, horizon + 2);
+
+    // Slow-drifting cumulus clouds.
+    const drift = elapsed * 5 * dpr;
+    for (let i = 0; i < 7; i++) {
+      const spread = viewW + 280 * dpr;
+      const x = ((i * 233 * dpr + drift * (0.35 + i * 0.05)) % spread) - 120 * dpr;
+      const y = viewH * (0.07 + (i % 3) * 0.075);
+      const puff = (44 + (i % 4) * 15) * dpr;
+      ctx.fillStyle = `rgba(255,252,244,${0.32 - (i % 3) * 0.05})`;
+      ctx.beginPath();
+      ctx.ellipse(x, y, puff, puff * 0.3, 0, 0, Math.PI * 2);
+      ctx.ellipse(x + puff * 0.66, y + puff * 0.1, puff * 0.62, puff * 0.28, 0, 0, Math.PI * 2);
+      ctx.ellipse(x - puff * 0.58, y + puff * 0.15, puff * 0.48, puff * 0.23, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Hazy hills behind the town.
+    const hillColors = ['rgba(122,146,112,.45)', 'rgba(104,130,98,.5)'];
+    hillColors.forEach((color, layer) => {
+      const base = horizon + 1;
+      const amplitude = viewH * (0.075 - layer * 0.015);
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(0, base);
+      for (let x = 0; x <= viewW; x += 12 * dpr) {
+        const wave = Math.sin(x / (viewW * 0.23) + layer * 2.1) * amplitude * 0.6
+          + Math.sin(x / (viewW * 0.08) + layer * 4.3) * amplitude * 0.35;
+        ctx.lineTo(x, base - amplitude - wave);
+      }
+      ctx.lineTo(viewW, base); ctx.closePath(); ctx.fill();
+    });
+
+    // Distant whitewashed town with terracotta roofs.
+    const skyline = [
+      [0.01, 0.06, 0.105], [0.115, 0.043, 0.075], [0.19, 0.075, 0.12], [0.305, 0.038, 0.065],
+      [0.365, 0.088, 0.15], [0.51, 0.05, 0.08], [0.585, 0.072, 0.115], [0.7, 0.042, 0.07],
+      [0.765, 0.082, 0.135], [0.89, 0.052, 0.085], [0.955, 0.068, 0.1],
+    ];
+    for (const [offset, tall, wide] of skyline) {
+      const x = offset * viewW, w = wide * viewW, h = tall * viewH;
+      ctx.fillStyle = 'rgba(207,202,182,.62)';
+      ctx.fillRect(x, horizon - h, w, h);
+      ctx.fillStyle = 'rgba(170,108,80,.7)';
+      ctx.beginPath();
+      ctx.moveTo(x - 3 * dpr, horizon - h);
+      ctx.lineTo(x + w * 0.5, horizon - h - 8 * dpr);
+      ctx.lineTo(x + w + 3 * dpr, horizon - h);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(72,104,106,.3)';
+      ctx.fillRect(x + w * 0.3, horizon - h * 0.72, w * 0.14, h * 0.22);
+      ctx.fillRect(x + w * 0.62, horizon - h * 0.72, w * 0.14, h * 0.22);
+    }
+
+    const haze = ctx.createLinearGradient(0, horizon - viewH * 0.15, 0, horizon);
+    haze.addColorStop(0, 'rgba(244,231,202,0)');
+    haze.addColorStop(1, 'rgba(246,232,201,.5)');
+    ctx.fillStyle = haze; ctx.fillRect(0, horizon - viewH * 0.15, viewW, viewH * 0.15);
   }
 
   function drawWorld() {
-    const sky = ctx.createLinearGradient(0, 0, 0, viewH * 0.56);
-    sky.addColorStop(0, '#202a2b'); sky.addColorStop(0.62, '#66706a'); sky.addColorStop(1, '#938d76');
-    ctx.fillStyle = sky; ctx.fillRect(0, 0, viewW, viewH * 0.56);
-    const floor = ctx.createLinearGradient(0, viewH * 0.48, 0, viewH);
-    floor.addColorStop(0, '#676456'); floor.addColorStop(0.26, '#403f37'); floor.addColorStop(1, '#161c1a');
-    ctx.fillStyle = floor; ctx.fillRect(0, viewH * 0.48, viewW, viewH * 0.52);
-    ctx.fillStyle = 'rgba(16,24,23,.19)';
-    ctx.fillRect(0, viewH * 0.1, viewW, viewH * 0.022);
-    ctx.fillRect(0, viewH * 0.19, viewW, viewH * 0.012);
+    drawSky();
+
+    const floor = ctx.createLinearGradient(0, viewH * 0.5, 0, viewH);
+    floor.addColorStop(0, '#cbbd9f'); floor.addColorStop(0.24, '#b0a185');
+    floor.addColorStop(0.62, '#8a7c64'); floor.addColorStop(1, '#584f41');
+    ctx.fillStyle = floor; ctx.fillRect(0, viewH * 0.5, viewW, viewH * 0.5);
+    ctx.fillStyle = 'rgba(255,248,226,.16)';
+    ctx.fillRect(0, viewH * 0.5, viewW, 2 * dpr);
+    ctx.fillStyle = 'rgba(88,76,58,.08)';
+    for (let i = 0; i < 11; i++) {
+      ctx.fillRect((i * 0.092 + 0.03) * viewW, viewH * 0.5, Math.max(1, 1.4 * dpr), viewH * 0.5);
+    }
+    // Paving joints receding toward the horizon.
+    const groundTop = viewH * 0.5;
+    for (let i = 1; i <= 18; i++) {
+      const t = i / 18;
+      const y = groundTop + (viewH - groundTop) * t * t;
+      ctx.fillStyle = `rgba(74,62,47,${0.05 + t * 0.07})`;
+      ctx.fillRect(0, y, viewW, Math.max(1, (0.4 + t) * dpr));
+    }
+    // Warm sunlight pooling in the middle of the plaza.
+    const sun = ctx.createRadialGradient(viewW * 0.58, viewH * 0.62, 0, viewW * 0.58, viewH * 0.62, viewW * 0.55);
+    sun.addColorStop(0, 'rgba(255,236,190,.16)'); sun.addColorStop(1, 'rgba(255,236,190,0)');
+    ctx.fillStyle = sun; ctx.fillRect(0, groundTop, viewW, viewH - groundTop);
 
     const strip = Math.max(1, Math.floor(2 * dpr));
     const cols = Math.ceil(viewW / strip);
@@ -83,28 +164,111 @@
       zBuffer[i] = ray.dist;
       const height = Math.min(viewH * 1.7, viewH / ray.dist * 0.78);
       const top = viewH * 0.5 - height * 0.5;
-      const shade = clamp(1 - ray.dist / 18, 0.22, 1) * (ray.side ? 0.76 : 1) * (ray.type === 3 ? 0.82 : 1);
-      let base = ray.type === 2 ? [91, 102, 88] : ray.type === 3 ? [116, 106, 73] : [106, 113, 98];
-      if (ray.tex < 0.035 || ray.tex > 0.965) base = base.map((value) => value * 0.68);
+      const shade = clamp(1 - ray.dist / 30, 0.42, 1) * (ray.side ? 0.84 : 1);
+      let base = ray.type === 2 ? [128, 160, 150]
+        : ray.type === 3 ? [166, 128, 82]
+          : ray.type === 4 ? [186, 118, 90]
+            : [203, 189, 160];
+      if (ray.tex < 0.03 || ray.tex > 0.97) base = base.map((value) => value * 0.74);
       ctx.fillStyle = `rgb(${Math.round(base[0] * shade)},${Math.round(base[1] * shade)},${Math.round(base[2] * shade)})`;
       ctx.fillRect(x, top, strip + 1, height);
-      const horizontal = ((top + height * 0.27) % Math.max(16 * dpr, height * 0.19)) < 1.2 * dpr;
-      if (horizontal) {
-        ctx.fillStyle = `rgba(14,21,19,${0.14 * shade})`;
-        ctx.fillRect(x, top + height * 0.27, strip + 1, 1.3 * dpr);
+
+      if (ray.type === 3) {
+        // Shipping crates: plank lines, dark gaps, and steel corner straps.
+        ctx.fillStyle = `rgba(74,48,26,${0.34 * shade})`;
+        for (const f of [0.22, 0.47, 0.73]) ctx.fillRect(x, top + height * f, strip + 1, 1.3 * dpr);
+        ctx.fillStyle = `rgba(42,34,24,${0.24 * shade})`;
+        ctx.fillRect(x, top + height * 0.02, strip + 1, height * 0.05);
+        ctx.fillRect(x, top + height * 0.93, strip + 1, height * 0.05);
+        if (ray.tex < 0.05 || ray.tex > 0.95) {
+          ctx.fillStyle = `rgba(88,84,70,${0.5 * shade})`;
+          ctx.fillRect(x, top, strip + 1, height);
+        }
+      } else {
+        // String course and baseboard.
+        ctx.fillStyle = `rgba(96,80,60,${0.2 * shade})`;
+        ctx.fillRect(x, top + height * 0.31, strip + 1, 1.2 * dpr);
+        ctx.fillRect(x, top + height * 0.52, strip + 1, 1.5 * dpr);
+        ctx.fillStyle = `rgba(62,52,40,${0.34 * shade})`;
+        ctx.fillRect(x, top + height * 0.955, strip + 1, height * 0.045);
+        const centre = Math.abs(ray.tex - 0.5);
+        // Per-tile facade variation keeps long walls from looking cloned.
+        const variant = (((ray.tileX | 0) * 73856093) ^ ((ray.tileY | 0) * 19349663)) >>> 0;
+        const doorway = variant % 5 === 0;
+        const shuttered = (variant >>> 3) % 3 === 0;
+        if (!doorway && centre < 0.15) {
+          const winTop = top + height * 0.34, winHeight = height * 0.25;
+          ctx.fillStyle = `rgba(38,60,64,${0.68 * shade})`;
+          ctx.fillRect(x, winTop, strip + 1, winHeight);
+          ctx.fillStyle = `rgba(132,208,200,${0.24 * shade})`;
+          ctx.fillRect(x, winTop + winHeight * 0.06, strip + 1, winHeight * 0.16);
+          ctx.fillStyle = `rgba(58,44,32,${0.62 * shade})`;
+          ctx.fillRect(x, winTop, strip + 1, Math.max(1, winHeight * 0.06));
+          ctx.fillRect(x, winTop + winHeight * 0.48, strip + 1, Math.max(1, winHeight * 0.035));
+          if (centre < 0.05) {
+            ctx.fillStyle = `rgba(44,74,72,${0.55 * shade})`;
+            ctx.fillRect(x, winTop - winHeight * 0.05, strip + 1, winHeight * 0.05);
+          }
+        } else if (shuttered && centre < 0.33) {
+          // Iron shutters flanking some windows.
+          ctx.fillStyle = `rgba(70,86,74,${0.34 * shade})`;
+          ctx.fillRect(x, top + height * 0.31, strip + 1, height * 0.31);
+          ctx.fillStyle = `rgba(44,58,48,${0.3 * shade})`;
+          ctx.fillRect(x, top + height * 0.45, strip + 1, 1.1 * dpr);
+        }
+        if (ray.type === 4) {
+          // Brick coursing.
+          ctx.fillStyle = `rgba(88,48,34,${0.24 * shade})`;
+          for (const f of [0.42, 0.68, 0.9]) ctx.fillRect(x, top + height * f, strip + 1, 1.1 * dpr);
+        }
+        if (ray.type === 2) {
+          // Teal facade: painted band and climbing ivy near the eaves.
+          ctx.fillStyle = `rgba(226,212,178,${0.5 * shade})`;
+          ctx.fillRect(x, top + height * 0.62, strip + 1, 1.2 * dpr);
+          if (ray.tex > 0.78 || (ray.tex > 0.2 && ray.tex < 0.26)) {
+            ctx.fillStyle = `rgba(58,96,52,${0.5 * shade})`;
+            ctx.fillRect(x, top + height * 0.04, strip + 1, height * 0.4);
+            ctx.fillStyle = `rgba(96,140,74,${0.34 * shade})`;
+            ctx.fillRect(x, top + height * 0.04, strip + 1, height * 0.08);
+          }
+        }
+        // Arched doorway on ground level with a striped awning above it.
+        if (doorway && centre < 0.12 && height > viewH * 0.22) {
+          const doorTop = top + height * 0.63, doorHeight = height * 0.32;
+          ctx.fillStyle = `rgba(48,34,24,${0.72 * shade})`;
+          ctx.beginPath();
+          ctx.moveTo(x, top + height * 0.95);
+          ctx.lineTo(x, doorTop + doorHeight * 0.2);
+          ctx.quadraticCurveTo(x, doorTop, x + strip * 0.5, doorTop);
+          ctx.quadraticCurveTo(x + strip, doorTop, x + strip, doorTop + doorHeight * 0.2);
+          ctx.lineTo(x + strip, top + height * 0.95);
+          ctx.fill();
+          const stripe = Math.floor(ray.tex * 16) % 2;
+          const tealAwning = variant % 3 === 0;
+          ctx.fillStyle = stripe
+            ? (tealAwning ? `rgba(52,104,92,${0.85 * shade})` : `rgba(206,92,68,${0.82 * shade})`)
+            : `rgba(234,220,192,${0.85 * shade})`;
+          ctx.fillRect(x, doorTop - height * 0.045, strip + 1, height * 0.045);
+          ctx.fillStyle = `rgba(48,36,28,${0.3 * shade})`;
+          ctx.fillRect(x, doorTop, strip + 1, Math.max(1, height * 0.006));
+        }
       }
-      if (ray.type === 2 && ray.tex > 0.47 && ray.tex < 0.53) {
-        ctx.fillStyle = `rgba(216,182,92,${shade * 0.58})`;
-        ctx.fillRect(x, top + height * 0.72, strip + 1, Math.max(2, height * 0.018));
+      if (height > viewH * 0.1) {
+        // Terracotta eaves.
+        ctx.fillStyle = `rgba(173,104,72,${0.4 * shade})`;
+        ctx.fillRect(x, top, strip + 1, Math.max(1.5, height * 0.032));
+        ctx.fillStyle = `rgba(112,64,44,${0.3 * shade})`;
+        ctx.fillRect(x, top + height * 0.032, strip + 1, Math.max(1, height * 0.008));
+        if (height > viewH * 0.6) {
+          ctx.fillStyle = `rgba(214,132,92,${0.22 * shade})`;
+          ctx.fillRect(x, top, strip + 1, Math.max(1, height * 0.012));
+        }
       }
-      const fog = clamp((ray.dist - 7) / 16, 0, 0.72);
+
+      const fog = clamp((ray.dist - 9) / 25, 0, 0.6);
       if (fog) {
-        ctx.fillStyle = `rgba(106,116,103,${fog * 0.45})`;
+        ctx.fillStyle = `rgba(235,224,199,${fog * 0.55})`;
         ctx.fillRect(x, top, strip + 1, height);
-      }
-      if (i % Math.max(1, Math.floor(42 * dpr / strip)) === 0) {
-        ctx.fillStyle = 'rgba(205,198,165,.035)';
-        ctx.fillRect(x, viewH * 0.59, 1, viewH * 0.41);
       }
     }
 
@@ -121,11 +285,89 @@
         ctx.fillStyle = '#d9fb62'; ctx.fillText(name, point.x + size, viewH * 0.53 - size);
       }
     }
+    drawProps();
     drawActors();
     drawWeapon();
     const haze = ctx.createLinearGradient(0, viewH * 0.43, 0, viewH * 0.7);
-    haze.addColorStop(0, 'rgba(190,179,137,0)'); haze.addColorStop(1, 'rgba(172,155,112,.06)');
+    haze.addColorStop(0, 'rgba(240,226,192,0)'); haze.addColorStop(1, 'rgba(240,226,192,.07)');
     ctx.fillStyle = haze; ctx.fillRect(0, viewH * 0.43, viewW, viewH * 0.27);
+  }
+
+  function drawProps() {
+    const props = MAP.props || [];
+    if (!props.length) return;
+    const visible = props.map((prop) => ({ prop, point: projectPoint(prop.x, prop.y) }))
+      .filter((entry) => entry.point && entry.point.dist > 0.6 && entry.point.dist < 30 && entry.point.dist < zAt(entry.point.x) + 0.45)
+      .sort((a, b) => b.point.dist - a.point.dist);
+    for (const { prop, point } of visible) {
+      const sway = Math.sin(elapsed * 0.9 + prop.x * 1.7) * 0.014;
+      const unit = viewH / point.dist;
+      const ground = viewH * 0.5 + viewH * 0.39 / point.dist;
+      const size = unit * 0.4 * (prop.size || 1);
+      const fog = clamp((point.dist - 8) / 22, 0, 0.55);
+      const alpha = 1 - fog * 0.7;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      if (prop.type === 'tree') {
+        ctx.fillStyle = '#6b4c31';
+        ctx.fillRect(point.x - size * 0.05, ground - size * 0.78, size * 0.1, size * 0.8);
+        ctx.fillStyle = '#4d7136';
+        ctx.beginPath(); ctx.ellipse(point.x + sway * size, ground - size * 0.95, size * 0.42, size * 0.34, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#5f8a41';
+        ctx.beginPath(); ctx.ellipse(point.x - size * 0.14 + sway * size, ground - size * 1.1, size * 0.3, size * 0.26, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#719c4e';
+        ctx.beginPath(); ctx.ellipse(point.x + size * 0.16 + sway * size, ground - size * 1.05, size * 0.24, size * 0.2, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(30,42,26,.28)';
+        ctx.beginPath(); ctx.ellipse(point.x, ground, size * 0.34, size * 0.08, 0, 0, Math.PI * 2); ctx.fill();
+      } else if (prop.type === 'stall') {
+        ctx.fillStyle = '#6d4a2c';
+        ctx.fillRect(point.x - size * 0.4, ground - size * 0.62, size * 0.06, size * 0.62);
+        ctx.fillRect(point.x + size * 0.34, ground - size * 0.62, size * 0.06, size * 0.62);
+        ctx.fillStyle = '#8b6238';
+        ctx.fillRect(point.x - size * 0.44, ground - size * 0.4, size * 0.88, size * 0.09);
+        for (let i = 0; i < 5; i++) {
+          ctx.fillStyle = i % 2 ? '#e8d6b6' : '#2f6a5d';
+          ctx.fillRect(point.x - size * 0.5 + i * size * 0.2, ground - size * 0.78, size * 0.2, size * 0.12);
+        }
+        ctx.fillStyle = '#c9553c';
+        ctx.fillRect(point.x - size * 0.3, ground - size * 0.52, size * 0.14, size * 0.12);
+        ctx.fillStyle = '#d8b04a';
+        ctx.fillRect(point.x - size * 0.06, ground - size * 0.52, size * 0.14, size * 0.12);
+        ctx.fillStyle = '#7a9b4b';
+        ctx.fillRect(point.x + size * 0.18, ground - size * 0.52, size * 0.14, size * 0.12);
+      } else if (prop.type === 'umbrella') {
+        ctx.fillStyle = '#7b7466';
+        ctx.fillRect(point.x - size * 0.02, ground - size * 0.95, size * 0.04, size * 0.95);
+        ctx.fillStyle = '#efe6d2';
+        ctx.beginPath(); ctx.ellipse(point.x, ground - size * 0.98, size * 0.46, size * 0.17, 0, Math.PI, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#c8815a';
+        for (let i = -2; i <= 2; i += 2) {
+          ctx.beginPath(); ctx.ellipse(point.x + i * size * 0.13, ground - size * 0.98, size * 0.12, size * 0.15, 0, Math.PI, Math.PI * 2); ctx.fill();
+        }
+        ctx.fillStyle = '#8a6a4a';
+        ctx.beginPath(); ctx.ellipse(point.x, ground, size * 0.3, size * 0.08, 0, 0, Math.PI * 2); ctx.fill();
+      } else if (prop.type === 'planter') {
+        ctx.fillStyle = '#a3917a';
+        ctx.fillRect(point.x - size * 0.22, ground - size * 0.34, size * 0.44, size * 0.34);
+        ctx.fillStyle = '#8c7a63';
+        ctx.fillRect(point.x - size * 0.25, ground - size * 0.4, size * 0.5, size * 0.08);
+        ctx.fillStyle = '#4f7a3a';
+        ctx.beginPath(); ctx.ellipse(point.x, ground - size * 0.5, size * 0.24, size * 0.16, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#c85a52';
+        for (let i = -1; i <= 1; i++) {
+          ctx.beginPath(); ctx.arc(point.x + i * size * 0.12, ground - size * 0.54 + Math.abs(i) * size * 0.03, size * 0.035, 0, Math.PI * 2); ctx.fill();
+        }
+      } else if (prop.type === 'barrel') {
+        ctx.fillStyle = '#8a5a34';
+        ctx.fillRect(point.x - size * 0.15, ground - size * 0.46, size * 0.3, size * 0.46);
+        ctx.fillStyle = 'rgba(52,34,20,.5)';
+        ctx.fillRect(point.x - size * 0.15, ground - size * 0.36, size * 0.3, size * 0.035);
+        ctx.fillRect(point.x - size * 0.15, ground - size * 0.18, size * 0.3, size * 0.035);
+        ctx.fillStyle = '#c9a86a';
+        ctx.fillRect(point.x - size * 0.15, ground - size * 0.46, size * 0.3, size * 0.035);
+      }
+      ctx.restore();
+    }
   }
 
   function projectPoint(x, y) {
@@ -270,7 +512,7 @@
   function respawnLocal(actor) {
     const spawn = MAP.spawns[actor.team][actor.spawnSlot || 0];
     actor.x = spawn[0]; actor.y = spawn[1];
-    actor.angle = actor.team === 'CT' ? 0.15 : Math.PI + 0.15;
+    actor.angle = spawnFacing[actor.team] ?? 0;
     const index = Number.isInteger(actor.weaponIndex) ? actor.weaponIndex : 1;
     const weapon = WEAPONS[index] || WEAPONS[1];
     actor.weaponIndex = index;
@@ -281,6 +523,22 @@
       weaponStock[index].ammo = actor.ammo; weaponStock[index].reserve = actor.reserve;
       setToast('BACK IN THE FIGHT'); updateVitals(); updateAmmo();
     }
+  }
+
+  function patrolPoint(bot) {
+    // Spread squadmates around their site instead of stacking on one tile.
+    const site = MAP.sites[bot.objective] || MAP.sites.A;
+    const slots = [0, 1, 2, 3, 5, 6, 7, 9, 10, 11];
+    const slot = Number.isFinite(bot.spawnSlot) ? bot.spawnSlot : 0;
+    const angle = (slot * 2.399) % (Math.PI * 2);
+    const radius = 1.1 + (slots[(slot + (bot.patrolRound || 0)) % slots.length] % 5) * 0.42;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const a = angle + attempt * 1.05;
+      const x = site.x + Math.cos(a) * radius;
+      const y = site.y + Math.sin(a) * radius;
+      if (!solid(x, y)) return [x, y];
+    }
+    return [site.x, site.y];
   }
 
   function updateBots(dt) {
@@ -296,19 +554,30 @@
       if (!target) continue;
       const dx = target.x - bot.x, dy = target.y - bot.y;
       const distance = Math.hypot(dx, dy);
-      bot.angle = Math.atan2(dy, dx);
       const seesTarget = MAP.lineClear(bot.x, bot.y, target.x, target.y);
       bot.stuckTime = (bot.stuckTime || 0);
       const previousX = bot.x, previousY = bot.y;
+      // With no enemy in sight, squads take their assigned site like an
+      // Ascent execute instead of all funneling through mid.
+      let goalX = target.x, goalY = target.y;
+      if (!seesTarget || distance > 9) {
+        if (!bot.patrol || Math.hypot(bot.patrol[0] - bot.x, bot.patrol[1] - bot.y) < 1.1) {
+          bot.patrolRound = (bot.patrolRound || 0) + 1;
+          bot.patrol = patrolPoint(bot);
+          if (Math.random() < 0.12) bot.objective = bot.objective === 'A' ? 'B' : 'A';
+        }
+        if (!seesTarget) { goalX = bot.patrol[0]; goalY = bot.patrol[1]; }
+      }
+      bot.angle = Math.atan2(seesTarget ? dy : goalY - bot.y, seesTarget ? dx : goalX - bot.x);
       if (distance > 4.1 || !seesTarget) {
         bot.pathTimer = (bot.pathTimer || 0) - dt;
-        const targetTile = `${Math.floor(target.x)},${Math.floor(target.y)}`;
+        const targetTile = `${Math.floor(goalX)},${Math.floor(goalY)}`;
         if (bot.pathTimer <= 0 || bot.pathTarget !== targetTile || !bot.waypoint) {
-          bot.waypoint = MAP.nextWaypoint(bot.x, bot.y, target.x, target.y);
+          bot.waypoint = MAP.nextWaypoint(bot.x, bot.y, goalX, goalY);
           bot.pathTarget = targetTile;
           bot.pathTimer = 0.45 + Math.random() * 0.2;
         }
-        const waypoint = bot.waypoint || [target.x, target.y];
+        const waypoint = bot.waypoint || [goalX, goalY];
         moveActor(bot, waypoint[0], waypoint[1], dt, bot.speed || 1.35);
         if (Math.hypot(bot.x - previousX, bot.y - previousY) < 0.001) bot.stuckTime += dt;
         else bot.stuckTime = 0;
@@ -751,12 +1020,13 @@
         const name = `${team === 'CT' ? 'SENTINEL' : 'RAIDER'} ${String(slot + 1).padStart(2, '0')}`;
         bots.push({
           id: `local-${team}-${slot}`, name, team, x: spawn[0], y: spawn[1],
-          angle: team === 'CT' ? 0.15 : Math.PI + 0.15,
+          angle: spawnFacing[team] ?? 0,
           hp: 100, armor: 50, ammo: WEAPONS[1].mag, reserve: WEAPONS[1].reserve,
           weaponIndex: 1, money: 0, alive: true, kills: 0, deaths: 0,
           isHuman: false, hurt: 0, fire: 0, cooldown: 1.2 + Math.random() * 1.3,
           respawnAt: 0, spawnSlot: slot, speed: 1.35 + Math.random() * 0.3,
           pathTimer: 0, waypoint: null, pathTarget: '', orbitSign: Math.random() < 0.5 ? -1 : 1, stuckTime: 0,
+          objective: slot % 2 === 0 ? 'A' : 'B', patrol: null, patrolTimer: 0,
         });
       }
     }
@@ -768,7 +1038,7 @@
     player.team = chosenTeam; player.name = callsign();
     const spawn = MAP.spawns[player.team][0];
     player.x = spawn[0]; player.y = spawn[1];
-    player.angle = player.team === 'CT' ? 0.15 : Math.PI + 0.15;
+    player.angle = spawnFacing[player.team] ?? 0;
     player.health = player.hp = 100; player.armor = 25; player.money = STARTING_CASH;
     weaponIndex = 1; player.weaponIndex = weaponIndex; weaponStock = createWeaponStock();
     player.ammo = WEAPONS[weaponIndex].mag; player.reserve = WEAPONS[weaponIndex].reserve; player.alive = true;
@@ -881,7 +1151,7 @@
     buyOpen = false; leaderboardOpen = false; buyScreen.classList.add('hidden'); leaderboardScreen.classList.add('hidden');
     hud.classList.add('hidden'); pause.classList.add('hidden'); result.classList.remove('hidden');
     $('resultTag').textContent = won ? 'SQUAD VICTORY' : 'SQUAD DEFEAT';
-    $('resultTitle').innerHTML = won ? 'DUSTLINE<br>SECURED.' : 'MATCH<br>LOST.';
+    $('resultTitle').innerHTML = won ? 'ASCENT<br>SECURED.' : 'MATCH<br>LOST.';
     $('resultText').textContent = won ? 'Your team reached fifteen eliminations. Clean work.' : 'The other squad reached fifteen. Regroup and re-deploy.';
     $('accuracyResult').textContent = (shots ? Math.round(hits / shots * 100) : 0) + '%';
     $('killsResult').textContent = String(localElims).padStart(2, '0');
@@ -912,37 +1182,65 @@
     if (!targetCanvas) return;
     const mapCtx = targetCanvas.getContext('2d');
     const width = targetCanvas.width, height = targetCanvas.height;
-    const scale = Math.min((width - 10) / W, (height - 10) / H);
+    const scale = Math.min((width - 12) / W, (height - 12) / H);
     const offsetX = (width - W * scale) / 2, offsetY = (height - H * scale) / 2;
+    const showLabels = width >= 300;
     mapCtx.clearRect(0, 0, width, height);
-    mapCtx.fillStyle = '#111916'; mapCtx.fillRect(0, 0, width, height);
-    mapCtx.fillStyle = '#202a24'; mapCtx.fillRect(offsetX, offsetY, W * scale, H * scale);
+    mapCtx.fillStyle = '#0b1212'; mapCtx.fillRect(0, 0, width, height);
+
+    // Valorant-style plan: solid town blocks in slate, pale walkable ground.
+    const solidColors = { 2: '#3d5a51', 3: '#8a6c42', 4: '#7c4938' };
+    mapCtx.fillStyle = '#303e39';
+    mapCtx.fillRect(offsetX, offsetY, W * scale, H * scale);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (map[y][x] !== 0) continue;
+        mapCtx.fillStyle = (x + y) % 2 ? '#c2cec0' : '#cad5c8';
+        mapCtx.fillRect(offsetX + x * scale, offsetY + y * scale, scale + 0.4, scale + 0.4);
+      }
+    }
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const tile = map[y][x];
-        if (!tile) continue;
-        mapCtx.fillStyle = tile === 2 ? '#59685a' : tile === 3 ? '#8a7856' : '#39433d';
-        mapCtx.fillRect(offsetX + x * scale, offsetY + y * scale, scale - 0.5, scale - 0.5);
-        if (tile === 3) {
-          mapCtx.strokeStyle = 'rgba(20,25,19,.65)'; mapCtx.lineWidth = Math.max(0.5, scale * 0.06);
-          mapCtx.beginPath(); mapCtx.moveTo(offsetX + x * scale, offsetY + y * scale); mapCtx.lineTo(offsetX + (x + 1) * scale, offsetY + (y + 1) * scale); mapCtx.stroke();
-        }
+        if (!tile || !solidColors[tile]) continue;
+        mapCtx.fillStyle = solidColors[tile];
+        mapCtx.fillRect(offsetX + x * scale, offsetY + y * scale, scale + 0.4, scale + 0.4);
       }
     }
+    mapCtx.strokeStyle = 'rgba(8,14,13,.9)';
+    mapCtx.lineWidth = Math.max(1, scale * 0.16);
+    mapCtx.strokeRect(offsetX, offsetY, W * scale, H * scale);
+
+    if (showLabels) {
+      mapCtx.textAlign = 'center'; mapCtx.textBaseline = 'middle';
+      for (const callout of MAP.callouts || []) {
+        if (callout.site || callout.spawn) continue;
+        const x = offsetX + callout.x * scale, y = offsetY + callout.y * scale;
+        mapCtx.font = `600 ${Math.max(7, scale * 1.25)}px DM Mono, monospace`;
+        mapCtx.fillStyle = callout.minor ? 'rgba(52,72,64,.72)' : 'rgba(35,51,45,.9)';
+        mapCtx.fillText(callout.label, x, y);
+      }
+    }
+
     for (const [name, site] of Object.entries(MAP.sites)) {
       const x = offsetX + site.x * scale, y = offsetY + site.y * scale;
-      mapCtx.beginPath(); mapCtx.arc(x, y, Math.max(4, scale * 0.48), 0, Math.PI * 2);
-      mapCtx.fillStyle = 'rgba(217,251,98,.17)'; mapCtx.fill();
-      mapCtx.lineWidth = Math.max(1, scale * 0.1); mapCtx.strokeStyle = '#d9fb62'; mapCtx.stroke();
-      mapCtx.fillStyle = '#eaff9c'; mapCtx.font = `bold ${Math.max(5, scale * 0.5)}px DM Mono, monospace`;
-      mapCtx.textAlign = 'center'; mapCtx.textBaseline = 'middle'; mapCtx.fillText(name, x, y);
+      const radius = Math.max(5, scale * 0.58);
+      mapCtx.beginPath(); mapCtx.arc(x, y, radius, 0, Math.PI * 2);
+      mapCtx.fillStyle = 'rgba(14,24,20,.82)'; mapCtx.fill();
+      mapCtx.lineWidth = Math.max(1, scale * 0.16); mapCtx.strokeStyle = '#d9fb62'; mapCtx.stroke();
+      mapCtx.fillStyle = '#eaff9c';
+      mapCtx.font = `bold ${Math.max(6, scale * 0.72)}px DM Mono, monospace`;
+      mapCtx.textAlign = 'center'; mapCtx.textBaseline = 'middle';
+      mapCtx.fillText(name, x, y);
     }
+
     const paintActor = (actor, isLocal = false) => {
       if (!actor || (!actor.alive && !isLocal)) return;
       const x = offsetX + actor.x * scale, y = offsetY + actor.y * scale;
       const radius = Math.max(isLocal ? 3.2 : 2.1, scale * (isLocal ? 0.28 : 0.2));
       mapCtx.beginPath(); mapCtx.arc(x, y, radius, 0, Math.PI * 2);
       mapCtx.fillStyle = TEAM_COLORS[actor.team] || '#e8efdf'; mapCtx.fill();
+      mapCtx.lineWidth = Math.max(0.7, scale * 0.06); mapCtx.strokeStyle = 'rgba(10,18,16,.85)'; mapCtx.stroke();
       if (isLocal) {
         mapCtx.strokeStyle = '#f3f4e9'; mapCtx.lineWidth = Math.max(1, scale * 0.08); mapCtx.stroke();
         mapCtx.strokeStyle = TEAM_COLORS[actor.team]; mapCtx.lineWidth = Math.max(1, scale * 0.12);
@@ -954,9 +1252,20 @@
       else bots.forEach((actor) => paintActor(actor));
       paintActor(player, true);
     } else {
-      MAP.spawns.CT.forEach((point, index) => paintActor({ x: point[0], y: point[1], angle: 0.15, team: 'CT', alive: true }, index === 0));
-      MAP.spawns.T.forEach((point) => paintActor({ x: point[0], y: point[1], angle: Math.PI + 0.15, team: 'T', alive: true }));
+      MAP.spawns.CT.forEach((point, index) => paintActor({ x: point[0], y: point[1], angle: MAP.spawnFacing.CT, team: 'CT', alive: true }, index === 0));
+      MAP.spawns.T.forEach((point) => paintActor({ x: point[0], y: point[1], angle: MAP.spawnFacing.T, team: 'T', alive: true }));
     }
+  }
+
+  function updateSiteIndicator() {
+    let nearest = null, nearestDistance = Infinity;
+    for (const [name, site] of Object.entries(MAP.sites)) {
+      const distance = Math.hypot(site.x - player.x, site.y - player.y);
+      if (distance < nearestDistance) { nearest = name; nearestDistance = distance; }
+    }
+    if (!nearest) return;
+    $('siteLetter').textContent = nearest;
+    $('siteName').textContent = nearestDistance < 3.4 ? `ON SITE ${nearest}` : `SITE ${nearest} · ${Math.round(nearestDistance)}M`;
   }
 
   function requestPointer() {
@@ -1058,6 +1367,7 @@
         }
       }
       $('clock').textContent = formatTime(elapsed);
+      updateSiteIndicator();
       $('damageFlash').style.opacity = performance.now() < damageUntil ? '.8' : '0';
       $('hitMarker').classList.toggle('active', performance.now() < hitUntil);
       $('toast').textContent = performance.now() < toastUntil ? toastText : '';
