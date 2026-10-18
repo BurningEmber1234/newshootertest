@@ -55,3 +55,5 @@ Copies the client files into `dist/`. The exported static site can be hosted any
 - **Esc** — close a menu, pause, or resume
 
 Matches are first-to-15 team eliminations. Start with a Vandal, Classic sidearm, $2,000, and partial armor; earn credits for eliminations and buy a Marshal or full Kevlar in the field armory. Bots push either site, rotate when a lane goes quiet, reposition in fights, aim, fire, and respawn. The live tactical map shows both teams, both sites, and the lane callouts (A main, mid, market, boat house, and more).
+
+Each weapon has its own hand-drawn first-person viewmodel with gloved hands, soft cel-shaded metal, idle sway, recoil kick, animated magazine reloads and muzzle flash — plus matching silhouettes in the weapon panel and the field armory.
