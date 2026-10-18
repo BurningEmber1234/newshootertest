@@ -35,9 +35,12 @@ Copies the client files into `dist/`. The exported static site can be hosted any
 - **W / A / S / D** — move and strafe
 - **Mouse** — aim (mouse-look locks automatically on desktop)
 - **Left mouse button** — fire; hold for automatic fire
+- **1 / 2 / 3** — equip Classic, Vandal, or Marshal
+- **B** — open the field armory to buy weapons or armor
+- **Tab** — hold to view the live leaderboard
 - **R** — reload
 - **Shift** — sprint
 - **Space** — vault / hop
-- **Esc** — pause or resume
+- **Esc** — close a menu, pause, or resume
 
-Matches are first-to-15 team eliminations. Players respawn, armor absorbs part of incoming damage, and the live tactical map shows both teams and bomb sites A/B.
+Matches are first-to-15 team eliminations. Start with a Vandal, Classic sidearm, $2,000, and partial armor; earn credits for eliminations and buy a Marshal or full Kevlar in the field armory. Bots navigate the depot, reposition in fights, aim, fire, and respawn. The live tactical map shows both teams and sites A/B.

@@ -122,3 +122,60 @@
   .weapon-panel{min-width:128px;gap:6px;padding:0 6px}
 }
 @media(prefers-reduced-motion:reduce){.team-option,.online-button,.join-row button{transition:none}}
+
+/* Field armory and live scoreboard overlays. */
+.leaderboard-trigger{position:absolute;left:50%;top:193px;transform:translateX(-50%);padding:5px 8px;border:1px solid rgba(220,232,217,.2);background:rgba(5,10,10,.6);color:#abb6ac;font:7px var(--mono);letter-spacing:.12em;pointer-events:auto;cursor:pointer}
+.leaderboard-trigger kbd{margin-left:6px;padding:2px 4px;border:1px solid rgba(220,232,217,.2);color:var(--lime);font:6px var(--mono)}
+.overlay-panel{position:absolute;z-index:10;left:50%;top:50%;transform:translate(-50%,-50%);width:min(680px,calc(100vw - 34px));max-height:min(82vh,720px);overflow:auto;padding:25px 28px 18px;border:1px solid rgba(220,235,215,.26);border-top:2px solid var(--lime);background:rgba(7,12,13,.96);box-shadow:0 22px 90px rgba(0,0,0,.65);backdrop-filter:blur(14px);pointer-events:auto}
+.overlay-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;padding:0 22px 15px 0;border-bottom:1px solid rgba(220,235,215,.15)}
+.overlay-heading h2{margin:8px 0 0;font:800 clamp(34px,6vw,50px)/.9 var(--display);letter-spacing:.01em;color:#f0f1ed}
+.overlay-heading .eyebrow{font-size:7px}
+.wallet{display:grid;gap:5px;text-align:right}
+.wallet small{font-size:6px;letter-spacing:.16em;color:#88958a}
+.wallet b{font:700 25px var(--display);color:var(--lime)}
+.overlay-help{margin:12px 0 15px;color:#a6b0a6;font-size:8px;letter-spacing:.035em}
+.buy-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.buy-card{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;min-height:83px;padding:12px;border:1px solid rgba(219,232,216,.16);background:rgba(23,31,28,.72)}
+.buy-card.active{border-color:rgba(217,251,98,.56);background:rgba(217,251,98,.07)}
+.buy-card h3{margin:0 0 5px;color:#eff2e9;font:700 19px var(--display);letter-spacing:.04em}
+.buy-card p{margin:0;color:#89958d;font-size:7px;letter-spacing:.08em}
+.buy-price{display:block;margin-top:7px;color:var(--lime);font-size:8px;letter-spacing:.12em}
+.buy-action{min-width:95px;height:31px;padding:0 9px;border:1px solid rgba(217,251,98,.4);background:rgba(217,251,98,.09);color:#edf2e6;font:7px var(--mono);letter-spacing:.11em;cursor:pointer}
+.buy-action:hover:not(:disabled){background:rgba(217,251,98,.2);border-color:var(--lime)}
+.buy-action:disabled{opacity:.42;cursor:not-allowed}
+.overlay-foot{display:flex;justify-content:space-between;gap:12px;margin-top:17px;padding-top:11px;border-top:1px solid rgba(220,235,215,.13);color:#849087;font-size:6px;letter-spacing:.13em}
+.overlay-close{position:absolute;right:14px;top:13px;width:25px;height:25px;border:1px solid rgba(220,235,215,.22);background:transparent;color:#d7dfd4;font:21px/1 Arial,sans-serif;cursor:pointer}
+.overlay-close:hover{color:var(--lime);border-color:var(--lime)}
+.buy-feedback.error{color:#ef9a69}
+.leaderboard-screen{width:min(760px,calc(100vw - 34px))}
+.leaderboard-score{display:flex;align-items:center;gap:11px;font:8px var(--mono);letter-spacing:.12em}
+.leaderboard-score span{color:#65c0ec}.leaderboard-score .t-team{color:#f08868}
+.leaderboard-score b{font:700 25px var(--display);color:#f0f1ed}
+.leaderboard-score em{font-style:normal;color:#707c73}
+.leaderboard-table-wrap{overflow-x:auto;margin-top:14px}
+.leaderboard-table{width:100%;border-collapse:collapse;white-space:nowrap}
+.leaderboard-table th{padding:9px 8px;text-align:left;color:#7f8b82;font-size:6px;font-weight:400;letter-spacing:.15em;border-bottom:1px solid rgba(220,235,215,.16)}
+.leaderboard-table td{padding:9px 8px;color:#dce3d7;font-size:8px;border-bottom:1px solid rgba(220,235,215,.08)}
+.leaderboard-table tbody tr:last-child td{border-bottom:0}
+.leaderboard-table tbody tr.local-row{background:rgba(217,251,98,.07)}
+.leaderboard-table td.rank{color:#87938a;font-size:7px}
+.leaderboard-table td.callsign{font-weight:500;color:#f0f1ed}
+.leaderboard-table td.side-ct{color:#65c0ec}.leaderboard-table td.side-t{color:#f08868}
+.leaderboard-table td.money{color:var(--lime);text-align:right}
+.leaderboard-table th:last-child{text-align:right}
+@media(max-width:700px){
+  .leaderboard-trigger{top:177px;font-size:6px}
+  .overlay-panel{padding:19px 15px 14px}
+  .overlay-heading{padding-bottom:11px}
+  .overlay-heading h2{font-size:34px}
+  .overlay-heading .eyebrow{font-size:6px}
+  .wallet b,.leaderboard-score b{font-size:20px}
+  .buy-grid{gap:6px}
+  .buy-card{grid-template-columns:1fr;gap:8px;min-height:92px;padding:9px}
+  .buy-action{width:100%;min-width:0;height:27px;font-size:6px}
+  .buy-card h3{font-size:16px}
+  .buy-card p{font-size:6px}
+  .overlay-foot{font-size:5px}
+  .leaderboard-table th{padding:7px 5px;font-size:5px}
+  .leaderboard-table td{padding:8px 5px;font-size:7px}
+}

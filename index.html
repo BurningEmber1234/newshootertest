@@ -57,19 +57,20 @@
           <div class="intel-rule"></div>
           <div class="intel-row"><span>THREAT LEVEL</span><b class="threat">HIGH</b></div>
           <div class="intel-row"><span>SQUAD SIZE</span><b>5 VS 5</b></div>
-          <div class="intel-row"><span>LOADOUT</span><b>VANDAL · ARMOR</b></div>
+          <div class="intel-row"><span>START CASH</span><b>$2,000 · VANDAL</b></div>
           <div class="intel-footer"><span class="intel-cross">✳</span> HOLD LANES. WATCH YOUR TEAM.</div>
         </div>
         <div class="map-label"><span class="map-pulse"></span> DUSTLINE DEPOT <span class="map-name">A / B SITES</span></div>
         <canvas class="map-preview" id="mapPreview" width="256" height="168" aria-label="Dustline Depot tactical map preview"></canvas>
       </div>
-      <div class="menu-bottom"><span>RIFT TACTICAL SYSTEMS <span class="muted">© 2025</span></span><span>TRAINING SIMULATION <span class="bottom-divider">/</span> BUILD 0.5.0</span></div>
+      <div class="menu-bottom"><span>RIFT TACTICAL SYSTEMS <span class="muted">© 2025</span></span><span>TRAINING SIMULATION <span class="bottom-divider">/</span> BUILD 0.6.0</span></div>
     </section>
 
     <section class="hud hidden" id="hud">
       <div class="hud-top-left"><div class="round-label">MATCH <b id="roundNum">01</b> <span class="round-slash">/</span> FIRST TO 15</div><div class="round-progress" id="roundProgress"><i></i><i></i><i></i><i></i><i></i></div></div>
       <div class="objective"><span class="objective-icon">◈</span><div><b>ELIMINATE THE OPPOSING TEAM</b><small id="objectiveSub">SITE A / SITE B · 5 ENEMIES ALIVE</small></div></div>
       <div class="scoreboard" aria-label="Team score"><span class="score-team ct-team">CT</span><b id="ctScore">00</b><em>:</em><b id="tScore">00</b><span class="score-team t-team">T</span></div>
+      <button class="leaderboard-trigger" id="leaderboardButton" type="button">▤ SCOREBOARD <kbd>TAB</kbd></button>
       <div class="minimap-wrap"><div class="minimap-head"><span>TACTICAL MAP</span><span id="teamLabel">CT SIDE</span></div><canvas id="minimap" width="168" height="168" aria-label="Live tactical map"></canvas><div class="minimap-legend"><span><i class="legend-ct"></i> CT</span><span><i class="legend-t"></i> T</span></div></div>
       <div class="site-indicator"><span class="site-letter">A</span><span>SITE A</span><span class="site-dot"></span></div>
       <div class="crosshair" id="crosshair"><i></i><i></i><i></i><i></i><b></b></div>
@@ -78,12 +79,27 @@
       <div class="toast" id="toast"></div>
       <div class="kill-feed" id="killFeed"></div>
       <div class="hud-bottom">
-        <div class="player-panel"><div class="player-icon">▰</div><div class="stat-block"><span>VITALS</span><div class="health-row"><b id="healthValue">100</b><div class="health-bar"><i id="healthBar"></i></div><small>HP</small></div></div><div class="panel-divider"></div><div class="stat-block armor-stat"><span>ARMOR</span><div class="health-row"><b id="armorValue">50</b><div class="armor-bar"><i></i></div><small>AP</small></div></div></div>
-        <div class="center-hint" id="centerHint"><span>W A S D</span> MOVE <span>SHIFT</span> SPRINT <span>SPACE</span> VAULT</div>
-        <div class="weapon-panel"><div class="weapon-info"><span class="weapon-name">VANDAL</span><span class="weapon-type">ASSAULT RIFLE <i>▴</i></span></div><div class="ammo"><b id="ammoValue">30</b><span>/</span><small id="reserveValue">90</small></div><div class="weapon-glyph">╱╱</div></div>
+        <div class="player-panel"><div class="player-icon">▰</div><div class="stat-block"><span>VITALS</span><div class="health-row"><b id="healthValue">100</b><div class="health-bar"><i id="healthBar"></i></div><small>HP</small></div></div><div class="panel-divider"></div><div class="stat-block armor-stat"><span>ARMOR</span><div class="health-row"><b id="armorValue">25</b><div class="armor-bar"><i></i></div><small>AP</small></div></div></div>
+        <div class="center-hint" id="centerHint"><span>W A S D</span> MOVE <span>SHIFT</span> SPRINT <span>B</span> BUY <span>1–3</span> WEAPONS</div>
+        <div class="weapon-panel"><div class="weapon-info"><span class="weapon-name" id="weaponName">VANDAL</span><span class="weapon-type" id="weaponType">ASSAULT RIFLE <i>▴</i></span></div><div class="ammo"><b id="ammoValue">30</b><span>/</span><small id="reserveValue">90</small></div><div class="weapon-glyph">╱╱</div></div>
       </div>
       <div class="reload-indicator" id="reloadIndicator"><span class="reload-spinner">◌</span> RELOADING</div>
       <div class="pause-hint">ESC <span>PAUSE</span><b class="room-hud-tag hidden" id="roomHudTag">ROOM -----</b></div>
+    </section>
+
+    <section class="overlay-panel buy-screen hidden" id="buyScreen" aria-label="Buy menu">
+      <div class="overlay-heading"><div><span class="eyebrow"><span class="eyebrow-line"></span> ARMORY / FIELD PURCHASES</span><h2>GEAR UP.</h2></div><div class="wallet"><small>AVAILABLE CREDITS</small><b id="buyCash">$2,000</b></div></div>
+      <p class="overlay-help" id="buyFeedback">Select a weapon or replenish armor. Weapon ownership persists through respawns.</p>
+      <div class="buy-grid" id="buyItems"></div>
+      <div class="overlay-foot"><span><span class="keycap">B</span> CLOSE ARMORY</span><span>CREDITS EARNED FROM TEAM ELIMS</span></div>
+      <button class="overlay-close" id="buyCloseButton" type="button" aria-label="Close buy menu">×</button>
+    </section>
+
+    <section class="overlay-panel leaderboard-screen hidden" id="leaderboardScreen" aria-label="Match leaderboard">
+      <div class="overlay-heading"><div><span class="eyebrow"><span class="eyebrow-line"></span> LIVE MATCH DATA</span><h2>LEADERBOARD.</h2></div><div class="leaderboard-score"><span class="ct-team">CT <b id="leaderCtScore">00</b></span><em>:</em><span class="t-team"><b id="leaderTScore">00</b> T</span></div></div>
+      <div class="leaderboard-table-wrap"><table class="leaderboard-table"><thead><tr><th>#</th><th>CALLSIGN</th><th>SIDE</th><th>LOADOUT</th><th>K</th><th>D</th><th>CREDITS</th></tr></thead><tbody id="leaderboardRows"></tbody></table></div>
+      <div class="overlay-foot"><span><span class="keycap">TAB</span> CLOSE SCOREBOARD</span><span>FIRST TO 15 ELIMS</span></div>
+      <button class="overlay-close" id="leaderboardCloseButton" type="button" aria-label="Close scoreboard">×</button>
     </section>
 
     <section class="result-screen hidden" id="resultScreen"><div class="result-tag" id="resultTag">MATCH COMPLETE</div><h2 id="resultTitle">SITE<br>SECURED.</h2><p id="resultText">Your squad controlled the depot.</p><div class="result-stats"><div><span>ACCURACY</span><b id="accuracyResult">0%</b></div><div><span>ELIMS</span><b id="killsResult">00</b></div><div><span>TIME</span><b id="timeResult">00:00</b></div></div><button class="play-button result-button" id="againButton" type="button"><span>RUN IT BACK</span><span class="button-arrow">↗</span></button></section>
@@ -91,6 +107,7 @@
     <div class="footer-mark"><span class="footer-cross">✳</span> RIFT TACTICAL SYSTEMS</div>
   </main>
   <script src="./map-data.js"></script>
+  <script src="./weapon-data.js"></script>
   <script src="./network.js"></script>
   <script src="./game.js"></script>
 </body>
