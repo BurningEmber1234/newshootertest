@@ -4,19 +4,27 @@
   const $ = (id) => document.getElementById(id);
   const menu = $('menuScreen'), hud = $('hud'), result = $('resultScreen'), pause = $('pauseScreen');
   const MAP = window.RiftMap;
+  const WEAPONS = window.RiftWeapons;
   const W = MAP.width, H = MAP.height, map = MAP.grid, FOV = Math.PI * 0.39;
   const SCORE_LIMIT = 15;
+  const STARTING_CASH = 2000, ARMOR_PRICE = 650, ARMOR_CAP = 50, KILL_REWARD = 300;
   const TEAM_COLORS = { CT: '#63c2ed', T: '#f08466' };
-  const TEAM_NAMES = { CT: 'COUNTER-TERRORISTS', T: 'TERRORISTS' };
-  const player = { x: 3.3, y: 2.5, angle: 0.02, health: 100, armor: 50, ammo: 30, reserve: 90, team: 'CT', alive: true };
+  const player = { x: 3.3, y: 2.5, angle: 0.02, health: 100, armor: 25, ammo: 30, reserve: 90, money: STARTING_CASH, team: 'CT', alive: true, kills: 0, deaths: 0, weaponIndex: 1 };
+  let weaponIndex = 1;
+  let weaponStock = createWeaponStock();
   let bots = [], remoteActors = [], keys = {}, chosenTeam = 'CT';
   let playing = false, paused = false, gameMode = 'offline', onlineSession = null;
-  let reloading = false, reloadTimer = 0;
+  let reloading = false, reloadTimer = 0, buyOpen = false, leaderboardOpen = false;
   let lastTime = 0, elapsed = 0, shots = 0, hits = 0, localElims = 0;
   let lastShot = 0, hitUntil = 0, muzzleUntil = 0, damageUntil = 0, bob = 0, moveBlend = 0, jump = 0, mouseHeld = false;
   let toastUntil = 0, toastText = '', zBuffer = [], viewW = 0, viewH = 0, dpr = 1;
   let scores = { CT: 0, T: 0 }, lastEventId = 0, networkInFlight = false, lastNetworkSync = 0, lastNetworkSuccess = 0;
   let previewCanvas = $('mapPreview'), minimapCanvas = $('minimap');
+  const buyScreen = $('buyScreen'), leaderboardScreen = $('leaderboardScreen');
+
+  function createWeaponStock() {
+    return WEAPONS.map((weapon, index) => ({ owned: index < 2, ammo: weapon.mag, reserve: weapon.reserve }));
+  }
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const normalizeAngle = (angle) => Math.atan2(Math.sin(angle), Math.cos(angle));
@@ -227,7 +235,7 @@
   }
 
   function movePlayer(dt) {
-    if (!player.alive) { jump = Math.max(0, jump - dt * 1.8); return; }
+    if (!player.alive || buyOpen || leaderboardOpen) { jump = Math.max(0, jump - dt * 1.8); return; }
     const forward = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0);
     const strafe = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
     const length = Math.hypot(forward, strafe) || 1;
@@ -263,9 +271,16 @@
     const spawn = MAP.spawns[actor.team][actor.spawnSlot || 0];
     actor.x = spawn[0]; actor.y = spawn[1];
     actor.angle = actor.team === 'CT' ? 0.15 : Math.PI + 0.15;
-    actor.hp = actor.health = 100; actor.armor = 50; actor.ammo = 30; actor.reserve = 90;
+    const index = Number.isInteger(actor.weaponIndex) ? actor.weaponIndex : 1;
+    const weapon = WEAPONS[index] || WEAPONS[1];
+    actor.weaponIndex = index;
+    actor.hp = actor.health = 100; actor.armor = actor === player ? 25 : 50;
+    actor.ammo = weapon.mag; actor.reserve = weapon.reserve;
     actor.alive = true; actor.respawnAt = 0; actor.cooldown = 1 + Math.random() * 1.2;
-    if (actor === player) { setToast('BACK IN THE FIGHT'); updateVitals(); }
+    if (actor === player) {
+      weaponStock[index].ammo = actor.ammo; weaponStock[index].reserve = actor.reserve;
+      setToast('BACK IN THE FIGHT'); updateVitals(); updateAmmo();
+    }
   }
 
   function updateBots(dt) {
@@ -283,16 +298,31 @@
       const distance = Math.hypot(dx, dy);
       bot.angle = Math.atan2(dy, dx);
       const seesTarget = MAP.lineClear(bot.x, bot.y, target.x, target.y);
+      bot.stuckTime = (bot.stuckTime || 0);
+      const previousX = bot.x, previousY = bot.y;
       if (distance > 4.1 || !seesTarget) {
         bot.pathTimer = (bot.pathTimer || 0) - dt;
         const targetTile = `${Math.floor(target.x)},${Math.floor(target.y)}`;
-        if (bot.pathTimer <= 0 || bot.pathTarget !== targetTile) {
+        if (bot.pathTimer <= 0 || bot.pathTarget !== targetTile || !bot.waypoint) {
           bot.waypoint = MAP.nextWaypoint(bot.x, bot.y, target.x, target.y);
           bot.pathTarget = targetTile;
-          bot.pathTimer = 0.55 + Math.random() * 0.25;
+          bot.pathTimer = 0.45 + Math.random() * 0.2;
         }
         const waypoint = bot.waypoint || [target.x, target.y];
-        moveActor(bot, waypoint[0], waypoint[1], dt, bot.speed || 0.78);
+        moveActor(bot, waypoint[0], waypoint[1], dt, bot.speed || 1.35);
+        if (Math.hypot(bot.x - previousX, bot.y - previousY) < 0.001) bot.stuckTime += dt;
+        else bot.stuckTime = 0;
+        if (bot.stuckTime > 0.55) {
+          bot.pathTimer = 0; bot.pathTarget = ''; bot.waypoint = null; bot.stuckTime = 0;
+          bot.orbitSign = -(bot.orbitSign || 1);
+        }
+      } else {
+        const side = bot.orbitSign || 1;
+        const lateralX = -Math.sin(bot.angle) * side * dt * 0.46;
+        const lateralY = Math.cos(bot.angle) * side * dt * 0.46;
+        if (!solid(bot.x + lateralX + Math.sign(lateralX) * 0.16, bot.y) && !solid(bot.x, bot.y + lateralY + Math.sign(lateralY) * 0.16)) {
+          bot.x += lateralX; bot.y += lateralY;
+        } else bot.orbitSign = -side;
       }
       bot.cooldown -= dt;
       if (seesTarget && distance < 14 && bot.cooldown <= 0) {
@@ -304,7 +334,7 @@
     if (!player.alive && player.respawnAt && now >= player.respawnAt) respawnLocal(player);
   }
 
-  function damageLocal(attacker, target, amount) {
+  function damageLocal(attacker, target, amount, weaponName = 'VANDAL') {
     if (!target.alive) return;
     const absorbed = Math.min(target.armor || 0, Math.ceil(amount * 0.58));
     target.armor = Math.max(0, (target.armor || 0) - absorbed);
@@ -315,26 +345,27 @@
       updateVitals();
     }
     target.hurt = 0.16;
-    if (target.hp <= 0) eliminateLocal(attacker, target);
+    if (target.hp <= 0) eliminateLocal(attacker, target, weaponName);
   }
 
-  function eliminateLocal(attacker, target) {
+  function eliminateLocal(attacker, target, weaponName = 'VANDAL') {
     if (!target.alive) return;
     target.alive = false; target.hp = 0; target.health = 0; target.deaths = (target.deaths || 0) + 1;
     target.respawnAt = Date.now() + 2400;
     if (attacker) {
+      attacker.kills = (attacker.kills || 0) + 1;
       scores[attacker.team]++;
-      if (attacker === player) localElims++;
-      addKillFeed(attacker.name || (attacker === player ? 'OPERATOR' : 'SQUAD'), target.name || 'OPERATOR', attacker.team);
+      if (attacker === player) { localElims++; player.money = Math.min(16000, player.money + KILL_REWARD); }
+      addKillFeed(attacker.name || (attacker === player ? 'OPERATOR' : 'SQUAD'), target.name || 'OPERATOR', attacker.team, weaponName);
       if (target === player) setToast('ELIMINATED — RESPAWNING');
-      else if (attacker === player) setToast(`${target.name || 'HOSTILE'} DOWN`);
+      else if (attacker === player) setToast(`${target.name || 'HOSTILE'} DOWN · +$${KILL_REWARD}`);
       updateScoreboard();
       if (scores[attacker.team] >= SCORE_LIMIT) finish(attacker.team === player.team);
     }
     if (target === player) updateVitals();
   }
 
-  function playerState() { return { x: player.x, y: player.y, angle: player.angle }; }
+  function playerState() { return { x: player.x, y: player.y, angle: player.angle, weaponIndex }; }
 
   function sendOnlineUpdate(now) {
     if (!onlineSession || networkInFlight || !playing || paused || now - lastNetworkSync < 110) return;
@@ -371,17 +402,21 @@
       player.health = you.hp;
       player.hp = you.hp;
       player.armor = you.armor;
-      if (!reloading) player.ammo = you.ammo;
-      player.reserve = you.reserve;
+      player.money = you.money ?? player.money;
       player.kills = you.kills;
+      player.deaths = you.deaths;
       player.shots = you.shots;
       player.hits = you.hits;
+      if (Array.isArray(you.weaponStock)) weaponStock = you.weaponStock.map((item) => ({ ...item }));
+      weaponIndex = Number.isInteger(you.weaponIndex) ? you.weaponIndex : weaponIndex;
+      player.weaponIndex = weaponIndex;
+      if (!reloading) { player.ammo = you.ammo; player.reserve = you.reserve; }
       if (you.alive) {
         player.x = you.x; player.y = you.y; player.angle = you.angle;
       }
       shots = you.shots || shots;
       hits = you.hits || hits;
-      updateVitals(); updateAmmo();
+      updateVitals(); updateWeaponUI();
     }
     scores = snapshot.scores || scores;
     updateScoreboard();
@@ -389,15 +424,19 @@
       if (event.id <= lastEventId) continue;
       lastEventId = event.id;
       if (event.type === 'kill') {
-        addKillFeed(event.actorName, event.targetName, event.actorTeam);
+        addKillFeed(event.actorName, event.targetName, event.actorTeam, event.weapon);
         hitUntil = performance.now() + 115;
         if (event.actorId === onlineSession.playerId) localElims++;
         if (event.targetId === onlineSession.playerId) setToast('ELIMINATED — RESPAWNING');
-        else if (event.actorId === onlineSession.playerId) setToast(`${event.targetName || 'HOSTILE'} DOWN`);
+        else if (event.actorId === onlineSession.playerId) setToast(`${event.targetName || 'HOSTILE'} DOWN · +$${KILL_REWARD}`);
       } else if (event.type === 'hit' && event.actorId === onlineSession.playerId) {
         hitUntil = performance.now() + 115;
       } else if (event.type === 'respawn' && event.actorId === onlineSession.playerId) {
         setToast('BACK IN THE FIGHT');
+      } else if (event.type === 'buy' && event.actorId === onlineSession.playerId) {
+        setBuyFeedback(`${event.item} PURCHASED. BALANCE ${formatMoney(event.money)}.`);
+      } else if (event.type === 'equip' && event.actorId === onlineSession.playerId) {
+        setToast(`${event.weapon} EQUIPPED`);
       } else if (event.type === 'join') {
         setToast(`${event.actorName} JOINED THE MATCH`);
       }
@@ -408,12 +447,52 @@
     if (snapshot.winner && playing) finish(snapshot.winner === player.team);
   }
 
+  function saveActiveWeapon() {
+    if (!weaponStock[weaponIndex]) return;
+    weaponStock[weaponIndex].ammo = player.ammo;
+    weaponStock[weaponIndex].reserve = player.reserve;
+  }
+
+  function updateWeaponUI() {
+    const weapon = WEAPONS[weaponIndex] || WEAPONS[1];
+    player.weaponIndex = weaponIndex;
+    $('weaponName').textContent = weapon.name;
+    $('weaponType').innerHTML = `${weapon.type} <i>▴</i>`;
+    updateAmmo();
+    if ($('buyCash')) $('buyCash').textContent = formatMoney(player.money);
+    if (buyOpen) renderBuyMenu();
+  }
+
+  function switchWeapon(index, fromShop = false) {
+    if (!playing || paused || !player.alive || reloading || (!fromShop && (buyOpen || leaderboardOpen))) return false;
+    const stock = weaponStock[index];
+    if (!Number.isInteger(index) || index < 0 || index >= WEAPONS.length || !stock || !stock.owned) {
+      if (!fromShop && WEAPONS[index]) {
+        setToast(`${WEAPONS[index].name} LOCKED — PRESS B TO BUY`);
+        openBuyMenu();
+      }
+      return false;
+    }
+    saveActiveWeapon();
+    weaponIndex = index; player.weaponIndex = index;
+    player.ammo = stock.ammo; player.reserve = stock.reserve;
+    updateWeaponUI();
+    setToast(`${index + 1} — ${WEAPONS[index].name}`);
+    if (gameMode === 'online' && onlineSession) {
+      window.RiftNetwork.selectWeapon(onlineSession, index, lastEventId)
+        .then((response) => applySnapshot(response.snapshot))
+        .catch((error) => handleNetworkError(error));
+    }
+    return true;
+  }
+
   function fire() {
-    if (!playing || paused || !player.alive || reloading) return;
+    if (!playing || paused || buyOpen || leaderboardOpen || !player.alive || reloading) return;
     if (!player.ammo) { reload(); return; }
+    const weapon = WEAPONS[weaponIndex] || WEAPONS[1];
     const now = performance.now();
-    if (now - lastShot < 105) return;
-    lastShot = now; player.ammo--; shots++; muzzleUntil = now + 75; updateAmmo();
+    if (now - lastShot < weapon.interval) return;
+    lastShot = now; player.ammo--; shots++; muzzleUntil = now + 75; saveActiveWeapon(); updateAmmo();
 
     if (gameMode === 'online' && onlineSession) {
       window.RiftNetwork.fire(onlineSession, playerState(), lastEventId)
@@ -435,14 +514,15 @@
     }
     if (target) {
       hits++; hitUntil = now + 115;
-      damageLocal(player, target, 34);
+      damageLocal(player, target, weapon.damage, weapon.name);
     }
     if (!player.ammo) setTimeout(() => { if (playing && !paused) reload(); }, 260);
   }
 
   function reload() {
-    if (reloading || player.ammo >= 30 || player.reserve <= 0 || !playing || !player.alive) return;
-    reloading = true; reloadTimer = 1.45;
+    const weapon = WEAPONS[weaponIndex] || WEAPONS[1];
+    if (reloading || player.ammo >= weapon.mag || player.reserve <= 0 || !playing || !player.alive || buyOpen || leaderboardOpen) return;
+    reloading = true; reloadTimer = weapon.reloadMs / 1000;
     $('reloadIndicator').classList.add('active');
     if (gameMode === 'online' && onlineSession) {
       window.RiftNetwork.reload(onlineSession, lastEventId)
@@ -451,13 +531,13 @@
     }
   }
 
-  function addKillFeed(attackerName, targetName, team) {
+  function addKillFeed(attackerName, targetName, team, weaponName = 'VANDAL') {
     const row = document.createElement('div');
     row.className = 'kill-entry';
     const actor = document.createElement('b'); actor.textContent = String(attackerName || 'SQUAD').toUpperCase();
     const target = document.createElement('b'); target.textContent = String(targetName || 'OPERATOR').toUpperCase();
     const mark = document.createElement('span'); mark.textContent = '✕';
-    const weapon = document.createElement('span'); weapon.textContent = 'VANDAL';
+    const weapon = document.createElement('span'); weapon.textContent = String(weaponName || 'VANDAL').toUpperCase();
     row.style.borderRightColor = TEAM_COLORS[team] || 'var(--lime)';
     row.append(actor, mark, target, weapon);
     $('killFeed').prepend(row);
@@ -469,11 +549,164 @@
     $('armorValue').textContent = Math.max(0, Math.round(player.armor));
     $('healthBar').style.width = clamp(player.health, 0, 100) + '%';
     document.querySelector('.armor-bar i').style.width = clamp(player.armor / 50 * 100, 0, 100) + '%';
+    if (buyOpen) renderBuyMenu();
   }
 
   function updateAmmo() {
     $('ammoValue').textContent = Math.max(0, player.ammo);
     $('reserveValue').textContent = Math.max(0, player.reserve);
+  }
+
+  function formatMoney(amount) { return '$' + Math.max(0, Math.floor(Number(amount) || 0)).toLocaleString('en-US'); }
+
+  function setBuyFeedback(message, isError = false) {
+    const feedback = $('buyFeedback');
+    feedback.textContent = message;
+    feedback.classList.toggle('error', isError);
+  }
+
+  function addBuyCard(container, { title, details, price, action, disabled = false, active = false, status = '' }) {
+    const card = document.createElement('article');
+    card.className = `buy-card${active ? ' active' : ''}`;
+    const copy = document.createElement('div');
+    const heading = document.createElement('h3'); heading.textContent = title;
+    const description = document.createElement('p'); description.textContent = details;
+    const priceLabel = document.createElement('span'); priceLabel.className = 'buy-price'; priceLabel.textContent = status || `PRICE ${formatMoney(price)}`;
+    copy.append(heading, description, priceLabel);
+    const button = document.createElement('button'); button.className = 'buy-action'; button.type = 'button';
+    button.textContent = active ? 'EQUIPPED' : status && status.startsWith('OWNED') ? 'EQUIP' : `BUY ${formatMoney(price)}`;
+    button.disabled = disabled || active;
+    if (!button.disabled) button.addEventListener('click', action);
+    card.append(copy, button); container.append(card);
+  }
+
+  function renderBuyMenu() {
+    if (!buyScreen) return;
+    $('buyCash').textContent = formatMoney(player.money);
+    const container = $('buyItems'); container.innerHTML = '';
+    WEAPONS.forEach((weapon, index) => {
+      const stock = weaponStock[index] || { owned: false };
+      const isActive = index === weaponIndex;
+      const status = stock.owned ? `OWNED · ${stock.ammo}/${weapon.mag} IN MAG` : '';
+      addBuyCard(container, {
+        title: weapon.name,
+        details: `${weapon.type} · ${weapon.mag} ROUND MAG · ${weapon.damage} DAMAGE`,
+        price: weapon.price,
+        active: isActive,
+        status,
+        disabled: !stock.owned && player.money < weapon.price,
+        action: () => purchaseWeapon(index),
+      });
+    });
+    const armorOwned = player.armor >= ARMOR_CAP;
+    addBuyCard(container, {
+      title: 'KEVLAR ARMOR',
+      details: `REPAIR VEST · ${Math.max(0, ARMOR_CAP - player.armor)} ARMOR POINTS AVAILABLE`,
+      price: ARMOR_PRICE,
+      active: armorOwned,
+      status: armorOwned ? 'ARMOR FULL' : `CURRENT ARMOR ${Math.round(player.armor)}/${ARMOR_CAP}`,
+      disabled: armorOwned || player.money < ARMOR_PRICE,
+      action: purchaseArmor,
+    });
+  }
+
+  async function purchaseWeapon(index) {
+    const weapon = WEAPONS[index], stock = weaponStock[index];
+    if (!weapon || !stock) return;
+    const buttonList = $('buyItems').querySelectorAll('button'); buttonList.forEach((button) => { button.disabled = true; });
+    try {
+      if (gameMode === 'online' && onlineSession) {
+        const response = stock.owned
+          ? await window.RiftNetwork.selectWeapon(onlineSession, index, lastEventId)
+          : await window.RiftNetwork.buy(onlineSession, { kind: 'weapon', weaponIndex: index }, lastEventId);
+        applySnapshot(response.snapshot);
+      } else {
+        if (!stock.owned) {
+          if (player.money < weapon.price) throw new Error(`Not enough credits. ${weapon.name} costs ${formatMoney(weapon.price)}.`);
+          player.money -= weapon.price;
+          stock.owned = true; stock.ammo = weapon.mag; stock.reserve = weapon.reserve;
+        }
+        switchWeapon(index, true);
+      }
+      setBuyFeedback(`${weapon.name} READY · ${formatMoney(player.money)} REMAINING.`);
+      renderBuyMenu();
+    } catch (error) {
+      setBuyFeedback(error.message, true);
+      renderBuyMenu();
+    }
+  }
+
+  async function purchaseArmor() {
+    if (player.armor >= ARMOR_CAP) return;
+    try {
+      if (gameMode === 'online' && onlineSession) {
+        const response = await window.RiftNetwork.buy(onlineSession, { kind: 'armor' }, lastEventId);
+        applySnapshot(response.snapshot);
+      } else {
+        if (player.money < ARMOR_PRICE) throw new Error(`Not enough credits. Armor costs ${formatMoney(ARMOR_PRICE)}.`);
+        player.money -= ARMOR_PRICE;
+        player.armor = ARMOR_CAP;
+        updateVitals();
+      }
+      setBuyFeedback(`ARMOR PURCHASED · ${formatMoney(player.money)} REMAINING.`);
+      renderBuyMenu();
+    } catch (error) {
+      setBuyFeedback(error.message, true);
+    }
+  }
+
+  function openBuyMenu() {
+    if (!playing || paused || leaderboardOpen) return;
+    if (!player.alive) { setToast('BUY AFTER RESPAWN'); return; }
+    buyOpen = true; renderBuyMenu();
+    buyScreen.classList.remove('hidden');
+    document.exitPointerLock?.();
+  }
+
+  function closeBuyMenu() {
+    if (!buyOpen) return;
+    buyOpen = false; buyScreen.classList.add('hidden');
+    if (playing && !paused && !leaderboardOpen) requestPointer();
+  }
+
+  function toggleBuyMenu() { if (buyOpen) closeBuyMenu(); else openBuyMenu(); }
+
+  function renderLeaderboard() {
+    if (!leaderboardScreen) return;
+    $('leaderCtScore').textContent = String(scores.CT || 0).padStart(2, '0');
+    $('leaderTScore').textContent = String(scores.T || 0).padStart(2, '0');
+    const actors = (gameMode === 'online' ? [player, ...remoteActors] : [player, ...bots]).slice();
+    actors.sort((a, b) => (b.kills || 0) - (a.kills || 0) || (a.deaths || 0) - (b.deaths || 0) || String(a.name).localeCompare(String(b.name)));
+    const rows = $('leaderboardRows'); rows.innerHTML = '';
+    actors.forEach((actor, index) => {
+      const tr = document.createElement('tr');
+      const local = actor === player || (onlineSession && actor.id === onlineSession.playerId);
+      if (local) tr.className = 'local-row';
+      const weapon = WEAPONS[actor.weaponIndex] || WEAPONS[1];
+      const values = [String(index + 1).padStart(2, '0'), actor.name || 'OPERATOR', actor.team || player.team, weapon.name, String(actor.kills || 0), String(actor.deaths || 0), formatMoney(actor.money)];
+      values.forEach((value, column) => {
+        const td = document.createElement('td'); td.textContent = value;
+        if (column === 0) td.className = 'rank';
+        if (column === 1) td.className = 'callsign';
+        if (column === 2) td.className = actor.team === 'T' ? 'side-t' : 'side-ct';
+        if (column === 6) td.className = 'money';
+        tr.append(td);
+      });
+      rows.append(tr);
+    });
+  }
+
+  function openLeaderboard() {
+    if (!playing || paused || buyOpen) return;
+    leaderboardOpen = true; renderLeaderboard();
+    leaderboardScreen.classList.remove('hidden');
+    document.exitPointerLock?.();
+  }
+
+  function closeLeaderboard() {
+    if (!leaderboardOpen) return;
+    leaderboardOpen = false; leaderboardScreen.classList.add('hidden');
+    if (playing && !paused && !buyOpen) requestPointer();
   }
 
   function updateObjective() {
@@ -491,6 +724,8 @@
       bar.style.background = own >= (index + 1) * 3 ? 'var(--lime)' : 'rgba(225,235,213,.18)';
     });
     updateObjective();
+    if (leaderboardOpen) renderLeaderboard();
+    if (buyOpen) renderBuyMenu();
   }
 
   function setToast(text) {
@@ -517,10 +752,11 @@
         bots.push({
           id: `local-${team}-${slot}`, name, team, x: spawn[0], y: spawn[1],
           angle: team === 'CT' ? 0.15 : Math.PI + 0.15,
-          hp: 100, armor: 50, ammo: 30, alive: true, kills: 0, deaths: 0,
+          hp: 100, armor: 50, ammo: WEAPONS[1].mag, reserve: WEAPONS[1].reserve,
+          weaponIndex: 1, money: 0, alive: true, kills: 0, deaths: 0,
           isHuman: false, hurt: 0, fire: 0, cooldown: 1.2 + Math.random() * 1.3,
-          respawnAt: 0, spawnSlot: slot, speed: 1.05 + Math.random() * 0.25,
-          pathTimer: 0, waypoint: null, pathTarget: '',
+          respawnAt: 0, spawnSlot: slot, speed: 1.35 + Math.random() * 0.3,
+          pathTimer: 0, waypoint: null, pathTarget: '', orbitSign: Math.random() < 0.5 ? -1 : 1, stuckTime: 0,
         });
       }
     }
@@ -529,21 +765,23 @@
   function setupMatch(mode) {
     gameMode = mode;
     scores = { CT: 0, T: 0 };
-    player.team = chosenTeam;
+    player.team = chosenTeam; player.name = callsign();
     const spawn = MAP.spawns[player.team][0];
     player.x = spawn[0]; player.y = spawn[1];
     player.angle = player.team === 'CT' ? 0.15 : Math.PI + 0.15;
-    player.health = player.hp = 100; player.armor = 50;
-    player.ammo = 30; player.reserve = 90; player.alive = true;
+    player.health = player.hp = 100; player.armor = 25; player.money = STARTING_CASH;
+    weaponIndex = 1; player.weaponIndex = weaponIndex; weaponStock = createWeaponStock();
+    player.ammo = WEAPONS[weaponIndex].mag; player.reserve = WEAPONS[weaponIndex].reserve; player.alive = true;
     player.kills = 0; player.deaths = 0; player.shots = 0; player.hits = 0; player.spawnSlot = 0; player.respawnAt = 0;
     bots = []; remoteActors = [];
     if (mode === 'offline') createLocalBots();
     elapsed = 0; shots = 0; hits = 0; localElims = 0;
     reloading = false; reloadTimer = 0; lastShot = 0; lastEventId = 0;
-    $('ammoValue').textContent = '30'; $('reserveValue').textContent = '90';
+    buyOpen = false; leaderboardOpen = false;
+    buyScreen.classList.add('hidden'); leaderboardScreen.classList.add('hidden');
     $('killFeed').innerHTML = ''; $('roundNum').textContent = '01';
     $('reloadIndicator').classList.remove('active');
-    updateVitals(); updateAmmo(); updateScoreboard(); updateObjective();
+    updateVitals(); updateWeaponUI(); updateScoreboard(); updateObjective();
   }
 
   function startMatch(mode = 'offline', initialSnapshot = null) {
@@ -627,8 +865,9 @@
   }
 
   async function returnToMenu() {
-    playing = false; paused = false; mouseHeld = false;
+    playing = false; paused = false; mouseHeld = false; buyOpen = false; leaderboardOpen = false;
     document.exitPointerLock?.();
+    buyScreen.classList.add('hidden'); leaderboardScreen.classList.add('hidden');
     hud.classList.add('hidden'); pause.classList.add('hidden'); result.classList.add('hidden'); menu.classList.remove('hidden');
     if (onlineSession) await leaveOnlineRoom();
     $('roomBanner').classList.add('hidden');
@@ -639,6 +878,7 @@
     if (!playing) return;
     playing = false; paused = false; mouseHeld = false;
     document.exitPointerLock?.();
+    buyOpen = false; leaderboardOpen = false; buyScreen.classList.add('hidden'); leaderboardScreen.classList.add('hidden');
     hud.classList.add('hidden'); pause.classList.add('hidden'); result.classList.remove('hidden');
     $('resultTag').textContent = won ? 'SQUAD VICTORY' : 'SQUAD DEFEAT';
     $('resultTitle').innerHTML = won ? 'DUSTLINE<br>SECURED.' : 'MATCH<br>LOST.';
@@ -747,12 +987,15 @@
   $('teamTButton').addEventListener('click', () => { chosenTeam = 'T'; updateTeamSelection(); });
   $('againButton').addEventListener('click', () => gameMode === 'online' ? returnToMenu() : startMatch('offline'));
   $('resumeButton').addEventListener('click', () => { paused = false; pause.classList.add('hidden'); hud.classList.remove('hidden'); requestPointer(); lastTime = performance.now(); });
+  $('buyCloseButton').addEventListener('click', closeBuyMenu);
+  $('leaderboardButton').addEventListener('click', () => leaderboardOpen ? closeLeaderboard() : openLeaderboard());
+  $('leaderboardCloseButton').addEventListener('click', closeLeaderboard);
 
   document.addEventListener('pointerlockchange', () => {
-    if (playing && !document.pointerLockElement && innerWidth > 720 && !paused) togglePause();
+    if (playing && !document.pointerLockElement && innerWidth > 720 && !paused && !buyOpen && !leaderboardOpen) togglePause();
   });
   document.addEventListener('mousemove', (event) => {
-    if (playing && !paused) {
+    if (playing && !paused && !buyOpen && !leaderboardOpen) {
       if (document.pointerLockElement === canvas) player.angle += event.movementX * 0.0025;
       else player.angle += event.movementX * 0.004;
       player.angle = normalizeAngle(player.angle);
@@ -766,17 +1009,32 @@
   canvas.addEventListener('contextmenu', (event) => event.preventDefault());
   document.addEventListener('keydown', (event) => {
     if (event.target && /^(INPUT|TEXTAREA)$/.test(event.target.tagName)) return;
+    if (event.code === 'Tab' && playing) {
+      event.preventDefault();
+      if (!leaderboardOpen) openLeaderboard();
+      return;
+    }
     keys[event.code] = true;
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
     if (event.code === 'Escape' && playing) {
-      if (document.pointerLockElement) document.exitPointerLock();
+      if (buyOpen) closeBuyMenu();
+      else if (leaderboardOpen) closeLeaderboard();
+      else if (document.pointerLockElement) document.exitPointerLock();
       else togglePause();
+      return;
     }
+    if (event.code === 'KeyB' && playing && !paused) { toggleBuyMenu(); return; }
+    if (event.code === 'Digit1') { switchWeapon(0); return; }
+    if (event.code === 'Digit2') { switchWeapon(1); return; }
+    if (event.code === 'Digit3') { switchWeapon(2); return; }
     if (event.code === 'KeyR') reload();
     if (event.code === 'Space' && playing && !paused && jump === 0) jump = 1;
   });
-  document.addEventListener('keyup', (event) => { keys[event.code] = false; });
-  window.addEventListener('blur', () => { keys = {}; mouseHeld = false; if (playing && !paused) togglePause(); });
+  document.addEventListener('keyup', (event) => {
+    keys[event.code] = false;
+    if (event.code === 'Tab' && leaderboardOpen) closeLeaderboard();
+  });
+  window.addEventListener('blur', () => { keys = {}; mouseHeld = false; if (playing && !paused && !buyOpen && !leaderboardOpen) togglePause(); });
 
   function frame(now) {
     const dt = Math.min(0.04, (now - (lastTime || now)) / 1000);
@@ -791,8 +1049,8 @@
         reloadTimer -= dt;
         if (reloadTimer <= 0) {
           if (gameMode === 'offline') {
-            const amount = Math.min(30 - player.ammo, player.reserve);
-            player.ammo += amount; player.reserve -= amount;
+            const amount = Math.min(WEAPONS[weaponIndex].mag - player.ammo, player.reserve);
+            player.ammo += amount; player.reserve -= amount; saveActiveWeapon();
           }
           reloading = false;
           $('reloadIndicator').classList.remove('active');

@@ -26,6 +26,16 @@
       state,
       lastEventId,
     }),
+    selectWeapon: (session, weaponIndex, lastEventId) => request(`/rooms/${encodeURIComponent(session.code)}/weapon`, {
+      playerId: session.playerId,
+      weaponIndex,
+      lastEventId,
+    }),
+    buy: (session, purchase, lastEventId) => request(`/rooms/${encodeURIComponent(session.code)}/buy`, {
+      playerId: session.playerId,
+      purchase,
+      lastEventId,
+    }),
     reload: (session, lastEventId) => request(`/rooms/${encodeURIComponent(session.code)}/reload`, {
       playerId: session.playerId,
       lastEventId,
