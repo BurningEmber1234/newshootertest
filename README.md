@@ -1,6 +1,6 @@
 # RIFT//STRIKE
 
-A self-contained browser-based tactical FPS prototype. Fight a 5v5 match on **Ascent**, a bright hillside town with a wide A site, a central mid courtyard and a B site, choose Counter-Terrorists or Terrorists, and take on squads of bots that move, aim, shoot, and respawn. Create or join an online room with a short code to play alongside another person.
+A self-contained browser-based tactical FPS prototype with a native-WebGL 3D world. Fight a 5v5 match on **Ascent**, a bright hillside town with a wide A site, a central mid courtyard and a B site, choose Counter-Terrorists or Terrorists, and take on squads of bots that move, aim, shoot, and respawn. The camera is first-person, with perspective 3D walls, ground, props and operator models, plus animated first-person weapon viewmodels. Create or join an online room with a short code to play alongside another person.
 
 The browser client and multiplayer server use plain JavaScript and Node's standard library; there are no third-party runtime dependencies.
 
@@ -44,7 +44,7 @@ Copies the client files into `dist/`. The exported static site can be hosted any
 ## Controls
 
 - **W / A / S / D** — move and strafe
-- **Mouse** — aim (mouse-look locks automatically on desktop)
+- **Mouse** — look and aim left/right and up/down (mouse-look locks automatically on desktop)
 - **Left mouse button** — fire; hold for automatic fire
 - **1 / 2 / 3** — equip Classic, Vandal, or Marshal
 - **B** — open the field armory to buy weapons or armor
