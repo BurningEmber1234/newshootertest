@@ -32,6 +32,7 @@ Copies the static site into `dist/`, ready to upload to any static host. There i
 - **Mouse** — aim (mouse-look locks automatically on desktop)
 - **Left mouse button** — fire; hold for automatic fire
 - **R** — reload
+- **1 / 2 / 3** — switch between Classic sidearm, Vandal assault rifle, and Marshal marksman rifle (each keeps its own ammo)
 - **Shift** — sprint
 - **Space** — vault / hop
 - **Esc** — pause or resume
