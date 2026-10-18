@@ -1,10 +1,14 @@
 (() => {
   const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d', { alpha: false });
+  const ctx = canvas.getContext('2d', { alpha: true });
   const $ = (id) => document.getElementById(id);
   const menu = $('menuScreen'), hud = $('hud'), result = $('resultScreen'), pause = $('pauseScreen');
   const MAP = window.RiftMap;
   const WEAPONS = window.RiftWeapons;
+  let world3d = null;
+  try { world3d = window.Rift3D?.init(document.getElementById('world3d'), MAP) || null; }
+  catch (error) { console.warn('3D renderer unavailable; using the classic renderer.', error); }
+  let viewPitch = 0;
   const W = MAP.width, H = MAP.height, map = MAP.grid, FOV = Math.PI * 0.39;
   const SCORE_LIMIT = 15;
   const STARTING_CASH = 2000, ARMOR_PRICE = 650, ARMOR_CAP = 50, KILL_REWARD = 300;
@@ -129,6 +133,13 @@
   }
 
   function drawWorld() {
+    if (world3d) {
+      ctx.clearRect(0, 0, viewW, viewH);
+      const actors = !playing ? [] : (gameMode === 'online' ? remoteActors : bots);
+      world3d.render(player, actors, viewPitch, innerWidth, innerHeight);
+      drawWeapon();
+      return;
+    }
     drawSky();
 
     const floor = ctx.createLinearGradient(0, viewH * 0.5, 0, viewH);
@@ -1656,6 +1667,7 @@
 
   function startMatch(mode = 'offline', initialSnapshot = null) {
     setupMatch(mode);
+    viewPitch = 0;
     playing = true; paused = false;
     menu.classList.add('hidden'); result.classList.add('hidden'); pause.classList.add('hidden'); hud.classList.remove('hidden');
     $('roomHudTag').classList.toggle('hidden', !onlineSession);
@@ -1905,9 +1917,9 @@
   });
   document.addEventListener('mousemove', (event) => {
     if (playing && !paused && !buyOpen && !leaderboardOpen) {
-      if (document.pointerLockElement === canvas) player.angle += event.movementX * 0.0025;
-      else player.angle += event.movementX * 0.004;
-      player.angle = normalizeAngle(player.angle);
+      const sensitivity = document.pointerLockElement === canvas ? 0.0025 : 0.004;
+      player.angle = normalizeAngle(player.angle + event.movementX * sensitivity);
+      viewPitch = clamp(viewPitch - event.movementY * sensitivity, -0.58, 0.58);
     }
   });
   canvas.addEventListener('mousedown', (event) => {
