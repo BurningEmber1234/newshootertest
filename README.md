@@ -1,22 +1,26 @@
 # RIFT//STRIKE
 
-A self-contained browser-based tactical FPS prototype inspired by classic competitive shooters. No build step, bundler, or third-party runtime dependencies are required.
+A self-contained browser-based tactical FPS prototype. Fight a 5v5 match on **Dustline Depot**, choose Counter-Terrorists or Terrorists, and take on squads of bots that move, aim, shoot, and respawn. Create or join an online room with a short code to play alongside another person.
+
+The browser client and multiplayer server use plain JavaScript and Node's standard library; there are no third-party runtime dependencies.
 
 ## Run locally
 
-Pick whichever you have installed — they all serve the same files:
+Use Node.js 18 or newer:
 
 ```sh
-npm run dev            # Node.js 18+ (http://localhost:4173)
+npm run dev            # http://localhost:4173
 ```
 
-```sh
-python3 -m http.server 4173
-```
+The server binds to `0.0.0.0` so another device can join when it can reach the host. Open the page, choose a side and a callsign, then:
 
-Then visit `http://localhost:4173`. Use a custom port with `PORT=8080 npm run dev`.
+- **Quick Play** — local 5v5 match against bots.
+- **Create Online Room** — start a network match and share the five-character room code.
+- **Join** — enter a room code from a match hosted on the same reachable server.
 
-Or simply open `index.html` in a modern desktop browser.
+Online rooms are held in server memory and use same-origin JSON polling. Keep the Node server running for the full match. For players outside your local network, the host must make the server's port reachable (for example, by deploying the Node server or configuring a suitable network tunnel/port forward). Static hosting alone supports Quick Play, but not online rooms.
+
+You can use another port with `PORT=8080 npm run dev`.
 
 ## Build
 
@@ -24,7 +28,7 @@ Or simply open `index.html` in a modern desktop browser.
 npm run build
 ```
 
-Copies the static site into `dist/`, ready to upload to any static host. There is no bundling or minification step.
+Copies the client files into `dist/`. The exported static site can be hosted anywhere for Quick Play. Online multiplayer requires the Node server in `server.js` because static hosts do not run the room API.
 
 ## Controls
 
@@ -36,4 +40,4 @@ Copies the static site into `dist/`, ready to upload to any static host. There i
 - **Space** — vault / hop
 - **Esc** — pause or resume
 
-Eliminate all five hostiles before they take you down. Your health, armor, ammo, accuracy, and mission time are tracked.
+Matches are first-to-15 team eliminations. Players respawn, armor absorbs part of incoming damage, and the live tactical map shows both teams and bomb sites A/B.

@@ -14,7 +14,7 @@ const ROOT = path.resolve(__dirname, '..');
 const OUT = path.join(ROOT, 'dist');
 
 // Everything the game needs at runtime. Add new asset folders here.
-const ENTRIES = ['index.html', 'styles.css', 'game.js', 'assets', 'favicon.ico'];
+const ENTRIES = ['index.html', 'styles.css', 'game.js', 'map-data.js', 'network.js', 'assets', 'favicon.ico'];
 
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(OUT, { recursive: true });
