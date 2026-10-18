@@ -447,23 +447,531 @@
     }
   }
 
-  function drawWeapon() {
-    const moving = moveBlend;
-    const sway = Math.sin(bob * 8) * moving * 8 * dpr;
-    const x = viewW * 0.67 + sway;
-    const y = viewH * 0.93 + Math.abs(Math.cos(bob * 8)) * moving * 5 * dpr + (jump ? -jump * 22 * dpr : 0);
-    ctx.save(); ctx.translate(x, y); ctx.rotate(-0.08 + Math.sin(bob * 4) * moving * 0.015);
-    ctx.fillStyle = '#343b35'; ctx.beginPath(); ctx.moveTo(-30 * dpr, 16 * dpr); ctx.lineTo(80 * dpr, -58 * dpr); ctx.lineTo(118 * dpr, -18 * dpr); ctx.lineTo(35 * dpr, 38 * dpr); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#565447'; ctx.beginPath(); ctx.moveTo(10 * dpr, 20 * dpr); ctx.lineTo(132 * dpr, -93 * dpr); ctx.lineTo(223 * dpr, -70 * dpr); ctx.lineTo(246 * dpr, -39 * dpr); ctx.lineTo(91 * dpr, 44 * dpr); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#252b26'; ctx.beginPath(); ctx.moveTo(92 * dpr, 7 * dpr); ctx.lineTo(184 * dpr, -71 * dpr); ctx.lineTo(304 * dpr, -67 * dpr); ctx.lineTo(313 * dpr, -45 * dpr); ctx.lineTo(205 * dpr, -32 * dpr); ctx.lineTo(116 * dpr, 35 * dpr); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#121714'; ctx.fillRect(265 * dpr, -68 * dpr, 166 * dpr, 13 * dpr); ctx.fillRect(397 * dpr, -73 * dpr, 38 * dpr, 4 * dpr);
-    ctx.fillStyle = '#70735d'; ctx.fillRect(190 * dpr, -79 * dpr, 28 * dpr, 10 * dpr); ctx.fillStyle = '#151b16'; ctx.fillRect(197 * dpr, -82 * dpr, 14 * dpr, 7 * dpr);
-    ctx.fillStyle = '#41483b'; ctx.beginPath(); ctx.moveTo(197 * dpr, -29 * dpr); ctx.lineTo(244 * dpr, -43 * dpr); ctx.lineTo(267 * dpr, 28 * dpr); ctx.lineTo(226 * dpr, 42 * dpr); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#31352b'; ctx.fillRect(120 * dpr, 21 * dpr, 66 * dpr, 12 * dpr);
-    if (performance.now() < muzzleUntil) {
-      ctx.fillStyle = '#fff5c0'; ctx.beginPath(); ctx.moveTo(430 * dpr, -61 * dpr); ctx.lineTo(472 * dpr, -83 * dpr); ctx.lineTo(458 * dpr, -58 * dpr); ctx.lineTo(486 * dpr, -49 * dpr); ctx.lineTo(444 * dpr, -41 * dpr); ctx.closePath(); ctx.fill();
+  // ---------------------------------------------------------------------------
+  // First-person viewmodels — stylised Valorant-style weapon silhouettes with
+  // gloved hands, cel-shaded metal, recoil, reloads and muzzle flash.
+  // Local units put the muzzle toward -X and the origin at the trigger.
+  // ---------------------------------------------------------------------------
+  const GUN = {
+    ink: '#090c0e', edge: 'rgba(6,9,11,.55)',
+    steelDark: '#171d22', steel: '#242c33', steelMid: '#303a42', steelLight: '#46525c', steelHi: '#5f6d78',
+    cream: '#ded8c4', creamDeep: '#b3ab93', creamShadow: '#8a836f',
+    accent: '#d94550', accentDeep: '#8d2830',
+    wood: '#5a4531', woodDark: '#3a2c20', woodLight: '#7a6044',
+    glove: '#222a33', gloveMid: '#2e3843', gloveLight: '#3f4b57', gloveHi: '#55footer',
+    sleeve: '#38455a', sleeveDark: '#26303f',
+    brass: '#c9a24e',
+  };
+  GUN.gloveHi = '#5a6a78';
+
+  const VIEWMODELS = {
+    classic: { anchorX: 0.845, anchorY: 0.765, rotation: 0.19, scale: 1.06, muzzle: [-306, -20] },
+    vandal: { anchorX: 0.878, anchorY: 0.878, rotation: 0.268, scale: 0.82, muzzle: [-660, -20] },
+    marshal: { anchorX: 0.928, anchorY: 0.872, rotation: 0.238, scale: 0.82, muzzle: [-750, -22] },
+  };
+
+  function gunPoly(points, fill, outline = true) {
+    ctx.beginPath();
+    ctx.moveTo(points[0][0], points[0][1]);
+    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+    if (outline) { ctx.strokeStyle = GUN.edge; ctx.lineWidth = 2.4; ctx.lineJoin = 'round'; ctx.stroke(); }
+  }
+  function gunRect(x, y, w, h, fill, outline = true) {
+    ctx.fillStyle = fill;
+    ctx.fillRect(x, y, w, h);
+    if (outline) { ctx.strokeStyle = GUN.edge; ctx.lineWidth = 2; ctx.strokeRect(x, y, w, h); }
+  }
+  function gunLine(x1, y1, x2, y2, color, width) {
+    ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  }
+  function gunStripes(x, y, width, height, count, color) {
+    const step = width / count;
+    for (let i = 0; i < count; i++) gunRect(x + i * step, y, Math.max(2, step * 0.4), height, color, false);
+  }
+  function gunGradient(x0, y0, x1, y1, stops) {
+    const gradient = ctx.createLinearGradient(x0, y0, x1, y1);
+    for (const [offset, color] of stops) gradient.addColorStop(offset, color);
+    return gradient;
+  }
+
+  // Rounded bar with a dark outline — the building block for hands.
+  function gunCapsule(x1, y1, x2, y2, radius, fill, outline = true) {
+    ctx.lineCap = 'round';
+    if (outline) {
+      ctx.strokeStyle = GUN.edge; ctx.lineWidth = radius * 2 + 4;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    }
+    ctx.strokeStyle = fill; ctx.lineWidth = radius * 2;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  }
+
+  // Forearm: a thick tapered capsule plus a cuff band.
+  function drawSleeve(fromX, fromY, toX, toY, width) {
+    const dx = toX - fromX, dy = toY - fromY;
+    const length = Math.hypot(dx, dy) || 1;
+    const ux = dx / length, uy = dy / length;
+    const px = -uy, py = ux;
+    const waist = width * 0.82;
+    gunPoly([
+      [fromX + px * width, fromY + py * width],
+      [toX + px * waist, toY + py * waist],
+      [toX - px * waist, toY - py * waist],
+      [fromX - px * width, fromY - py * width],
+    ], GUN.sleeve, true);
+    // Cuff and fabric fold shading.
+    gunPoly([
+      [toX + px * waist * 0.12 - ux * 22, toY + py * waist * 0.12 - uy * 22],
+      [toX + px * waist * 1.02 - ux * 22, toY + py * waist * 1.02 - uy * 22],
+      [toX + px * waist * 1.02, toY + py * waist * 1.02],
+      [toX + px * waist * 0.12, toY + py * waist * 0.12],
+    ], GUN.sleeveDark, false);
+    gunLine(fromX + px * width * 0.45, fromY + py * width * 0.45, toX + px * waist * 0.5, toY + py * waist * 0.5, 'rgba(255,255,255,.08)', 3);
+  }
+
+  // Back of a gloved hand: palm plus four knuckle plates and a thumb.
+  function drawGlove(cx, cy, angle, scale = 1, dir = 1) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
+    ctx.scale(dir * scale, scale);
+    // Palm and wrist.
+    gunCapsule(-18, 44, 4, -18, 30, GUN.glove);
+    gunCapsule(-20, 46, 0, 18, 17, GUN.gloveMid);
+    // Knuckle plates across the top of the hand.
+    for (let i = 0; i < 4; i++) {
+      const off = -24 + i * 15;
+      gunCapsule(off, -10, off + 3, -30, 8, GUN.gloveLight);
+      gunCapsule(off, -12, off + 3, -27, 4, 'rgba(255,255,255,.12)', false);
+    }
+    // Thumb hooked along the side.
+    gunCapsule(-26, 22, -46, 4, 12, GUN.gloveHi);
+    gunCapsule(10, 30, 26, 44, 8, 'rgba(255,255,255,.06)', false);
+    ctx.restore();
+  }
+
+  // Fingers curling around the front of a grip, drawn after the weapon.
+  function drawFingerWrap(x, y, angle, count, length, spacing, radius = 9, dir = 1) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.scale(dir, 1);
+    for (let i = 0; i < count; i++) {
+      const yy = i * spacing;
+      const taper = 1 - i * 0.07;
+      gunCapsule(0, yy, length * taper, yy + 3, radius * taper, i % 2 ? GUN.gloveMid : GUN.glove);
+      // Knuckle highlight on each finger.
+      gunCapsule(length * taper * 0.72, yy + 1, length * taper, yy + 3, radius * taper * 0.55, GUN.gloveLight, false);
+      gunLine(4, yy - radius * 0.3, length * taper * 0.8, yy + radius * 0.2, 'rgba(6,9,11,.35)', 2);
     }
     ctx.restore();
+  }
+
+  // A hand wrapped around a vertical grip. The glove sits on the near side of
+  // the grip and the fingers cross in front of it, so it reads as a real hold.
+  function drawGripHand(gripCenterX, topY, spread = 1) {
+    // Three fingers crossing the grip, drawn first so the glove overlaps them.
+    for (let i = 0; i < 3; i++) {
+      const y = topY + i * 22 * spread;
+      gunCapsule(gripCenterX + 34, y + 2, gripCenterX - 26, y + 7, 10 * spread, i % 2 ? GUN.gloveMid : GUN.glove);
+      gunCapsule(gripCenterX - 26, y + 7, gripCenterX - 34, y + 15, 10 * spread, GUN.glove, false);
+      gunLine(gripCenterX + 20, y + 1, gripCenterX - 14, y + 5, 'rgba(6,9,11,.4)', 2);
+    }
+    // Back of the hand and wrist on the near side.
+    gunCapsule(gripCenterX + 52, topY - 6, gripCenterX + 66, topY + 66 * spread, 26, GUN.glove);
+    gunCapsule(gripCenterX + 54, topY + 4, gripCenterX + 62, topY + 48 * spread, 15, GUN.gloveMid, false);
+    for (let i = 0; i < 3; i++) {
+      const y = topY + i * 22 * spread;
+      gunCapsule(gripCenterX + 44, y, gripCenterX + 64, y + 3, 10 * spread, GUN.gloveLight, false);
+      gunCapsule(gripCenterX + 44, y - 3, gripCenterX + 60, y - 1, 4 * spread, 'rgba(255,255,255,.14)', false);
+    }
+    // Knuckle plates on the near side of the glove.
+    for (let i = 0; i < 3; i++) {
+      const y = topY + 6 + i * 22 * spread;
+      gunCapsule(gripCenterX + 50, y, gripCenterX + 20, y + 4, 11 * spread, GUN.gloveLight);
+      gunCapsule(gripCenterX + 46, y - 4, gripCenterX + 28, y - 1, 4.5 * spread, 'rgba(255,255,255,.16)', false);
+    }
+    // Thumb laid over the top of the grip.
+    gunCapsule(gripCenterX + 44, topY - 14, gripCenterX - 12, topY - 22, 11 * spread, GUN.gloveHi);
+    gunCapsule(gripCenterX + 36, topY - 18, gripCenterX + 6, topY - 23, 4.5 * spread, 'rgba(255,255,255,.12)', false);
+  }
+
+  function drawMuzzleFlash(x, y, strength = 1) {
+    const seed = Math.floor(lastShot) % 13;
+    const wobble = 0.85 + ((seed * 37) % 23) / 80;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(Math.PI / 2 + (seed % 5 - 2) * 0.1);
+    const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, 86 * strength);
+    glow.addColorStop(0, 'rgba(255,250,226,.9)');
+    glow.addColorStop(0.34, 'rgba(255,198,108,.55)');
+    glow.addColorStop(1, 'rgba(255,132,36,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(0, 0, 86 * strength, 0, Math.PI * 2); ctx.fill();
+    const flare = wobble * strength;
+    const star = [[0, -64], [10, -22], [34, -8], [13, 7], [18, 24], [0, 44], [-18, 24], [-13, 7], [-34, -8], [-10, -22]];
+    ctx.beginPath();
+    ctx.moveTo(star[0][0] * flare, star[0][1] * flare);
+    for (let i = 1; i < star.length; i++) ctx.lineTo(star[i][0] * flare, star[i][1] * flare);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(255,247,214,.95)';
+    ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0, 0, 13 * flare, 26 * flare, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,242,.98)'; ctx.fill();
+    // Thin smoke curling off the muzzle.
+    ctx.rotate(-0.5);
+    ctx.strokeStyle = 'rgba(226,224,216,.22)';
+    ctx.lineWidth = 9 * strength;
+    ctx.beginPath();
+    ctx.moveTo(-6, 18);
+    ctx.quadraticCurveTo(26, 46, 4, 74);
+    ctx.quadraticCurveTo(-16, 98, 12, 122);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawShellCasing(x, y, now) {
+    const age = now - lastShot;
+    if (age < 0 || age > 320) return;
+    const t = age / 320;
+    ctx.save();
+    ctx.translate(x + t * 52, y - Math.sin(t * Math.PI) * 34 + t * t * 96);
+    ctx.rotate(t * 9);
+    gunRect(-4, -9, 8, 18, GUN.brass, false);
+    gunRect(-4, -9, 8, 4, '#e8cc84', false);
+    gunRect(-4, 7, 8, 4, '#8d6c2c', false);
+    ctx.restore();
+  }
+
+  // --- VANDAL ---------------------------------------------------------------
+  function drawVandalView(motion) {
+    const now = motion.now;
+    // Arms run behind the weapon and off the bottom of the frame.
+    drawSleeve(88, 120, 226, 300, 40);
+    drawSleeve(-352, 58, -214, 224, 34);
+    // Stock.
+    gunPoly([[104, -34], [228, -16], [252, 44], [188, 92], [110, 60]], GUN.steelDark);
+    gunPoly([[118, -26], [214, -12], [222, 6], [124, -10]], GUN.steelMid);
+    gunPoly([[196, 60], [250, 46], [256, 62], [200, 78]], GUN.ink);
+    gunPoly([[112, 4], [184, 14], [182, 44], [114, 34]], GUN.creamShadow);
+
+    // Receiver.
+    gunPoly([[-286, -46], [92, -46], [124, -10], [116, 46], [-266, 40], [-306, -6]], gunGradient(-286, -46, -266, 40, [
+      [0, GUN.steelMid], [0.42, GUN.steel], [1, GUN.steelDark],
+    ]));
+    gunPoly([[-286, -46], [92, -46], [98, -34], [-278, -34]], GUN.steelLight);
+    gunPoly([[-266, 34], [114, 40], [116, 46], [-266, 40]], GUN.ink, false);
+
+    // Cream side plate with the red accent slash.
+    gunPoly([[-252, -16], [52, -12], [66, 12], [22, 27], [-232, 23]], GUN.cream);
+    gunPoly([[-252, -16], [-166, -14], [-178, 25], [-232, 23]], GUN.accent);
+    gunPoly([[-166, -14], [-130, -13], [-142, 26], [-178, 25]], GUN.accentDeep);
+    gunPoly([[-246, -11], [46, -7], [50, -1], [-244, -5]], 'rgba(255,255,255,.35)', false);
+    gunPoly([[-224, 11], [16, 13], [19, 20], [-222, 18]], 'rgba(20,26,30,.22)', false);
+    gunLine(-120, 24, 56, 15, GUN.creamDeep, 2);
+
+    // Ejection port, charging handle, bolt.
+    gunRect(-150, -14, 64, 21, GUN.ink);
+    gunRect(-145, -10, 54, 12, '#070909');
+    gunRect(-145, -10, 54, 4, 'rgba(255,255,255,.09)', false);
+    gunPoly([[-58, -52], [-12, -52], [-8, -40], [-54, -40]], GUN.steelDark);
+    gunStripes(-54, -50, 44, 8, 4, GUN.steelLight);
+
+    // Pistol grip.
+    gunPoly([[-4, 28], [72, 34], [90, 104], [42, 134], [-2, 100]], gunGradient(0, 28, 60, 134, [
+      [0, GUN.steel], [1, GUN.steelDark],
+    ]));
+    gunStripes(8, 50, 50, 7, 4, GUN.steelLight);
+    gunStripes(12, 68, 46, 7, 4, GUN.steelLight);
+    gunPoly([[58, 38], [86, 42], [94, 72], [68, 68]], GUN.cream);
+    // Trigger and guard.
+    ctx.strokeStyle = GUN.steelMid; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(-10, 32); ctx.quadraticCurveTo(-28, 60, 10, 72); ctx.quadraticCurveTo(42, 80, 56, 60); ctx.stroke();
+    gunLine(8, 44, 22, 66, GUN.steelLight, 4);
+
+    // Magazine (animated during reloads).
+    const magDrop = motion.magDrop;
+    ctx.save();
+    ctx.translate(0, magDrop);
+    if (magDrop) ctx.rotate(magDrop * 0.0018);
+    gunPoly([[-178, 26], [-86, 30], [-58, 84], [-72, 166], [-150, 174], [-178, 90]], gunGradient(-178, 26, -80, 166, [
+      [0, GUN.steelMid], [0.5, GUN.steel], [1, GUN.steelDark],
+    ]));
+    gunPoly([[-170, 36], [-94, 40], [-72, 90], [-86, 154], [-138, 160], [-162, 92]], GUN.steelDark);
+    gunPoly([[-168, 40], [-142, 42], [-154, 154], [-162, 128]], 'rgba(255,255,255,.12)', false);
+    gunPoly([[-150, 168], [-72, 162], [-68, 180], [-148, 186]], GUN.ink);
+    gunRect(-154, 72, 72, 6, GUN.creamDeep, false);
+    gunRect(-122, 86, 38, 28, GUN.accent, false);
+    ctx.restore();
+
+    // Handguard.
+    gunPoly([[-500, -44], [-278, -44], [-268, 12], [-492, 16]], gunGradient(-500, -44, -492, 16, [
+      [0, GUN.steelLight], [0.38, GUN.steelMid], [1, GUN.steelDark],
+    ]));
+    gunPoly([[-500, -44], [-278, -44], [-276, -34], [-498, -34]], GUN.steelHi);
+    for (let i = 0; i < 4; i++) {
+      gunPoly([[-460 + i * 44, -24], [-444 + i * 44, -24], [-438 + i * 44, 8], [-454 + i * 44, 8]], GUN.ink);
+    }
+    gunStripes(-494, 8, 208, 6, 10, GUN.steelDark);
+
+    // Angled foregrip.
+    gunPoly([[-410, 8], [-362, 6], [-336, 84], [-380, 96]], gunGradient(-410, 8, -356, 96, [
+      [0, GUN.steelMid], [1, GUN.steelDark],
+    ]));
+    gunPoly([[-404, 20], [-368, 19], [-352, 74], [-386, 80]], GUN.creamDeep);
+    gunRect(-398, 34, 24, 7, GUN.accent, false);
+
+    // Barrel and muzzle brake.
+    gunPoly([[-604, -34], [-478, -36], [-478, -8], [-604, -10]], gunGradient(-604, -34, -478, -10, [
+      [0, GUN.steelDark], [0.55, GUN.steel], [1, GUN.steelMid],
+    ]));
+    gunPoly([[-604, -34], [-478, -36], [-478, -30], [-604, -28]], 'rgba(255,255,255,.14)', false);
+    gunPoly([[-506, -48], [-474, -48], [-472, -26], [-504, -26]], GUN.steelMid);
+    gunPoly([[-644, -40], [-600, -38], [-600, -4], [-644, -2]], GUN.ink);
+    gunRect(-630, -34, 8, 28, GUN.steelDark, false);
+    gunRect(-616, -34, 8, 28, GUN.steelDark, false);
+    gunPoly([[-644, -40], [-600, -38], [-600, -33], [-644, -35]], GUN.steelLight, false);
+
+    // Top rail, rear aperture and front post.
+    gunPoly([[-478, -52], [-118, -52], [-118, -44], [-478, -44]], GUN.steelDark);
+    gunStripes(-474, -50, 342, 6, 22, GUN.steelLight);
+    gunPoly([[-200, -62], [-170, -62], [-168, -52], [-202, -52]], GUN.steelDark);
+    ctx.strokeStyle = GUN.steel; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.arc(-185, -66, 10, 0, Math.PI * 2); ctx.stroke();
+    gunPoly([[-462, -54], [-446, -54], [-448, -96], [-462, -96]], GUN.steelMid);
+    gunPoly([[-468, -100], [-440, -100], [-442, -88], [-466, -88]], GUN.steelLight);
+
+    // Trigger hand wrapped around the pistol grip.
+    drawGripHand(28, 46, 1.0);
+    // Support hand clamped on the angled foregrip.
+    drawGripHand(-414, 6, 0.88);
+
+    if (now > 0 && now < muzzleUntil) drawMuzzleFlash(-764, -20, 1.25);
+    if (now > 0) drawShellCasing(-118, -6, now);
+  }
+
+  // --- CLASSIC ---------------------------------------------------------------
+  function drawClassicView(motion) {
+    const now = motion.now;
+    drawSleeve(96, 146, 238, 306, 42);
+    // Grip (behind the slide so the frame reads correctly).
+    gunPoly([[6, 26], [78, 32], [104, 158], [42, 176], [0, 86]], gunGradient(6, 26, 60, 170, [
+      [0, GUN.steel], [1, GUN.steelDark],
+    ]));
+    gunPoly([[18, 44], [66, 50], [88, 150], [52, 160], [24, 82]], GUN.ink);
+    gunStripes(30, 64, 44, 7, 3, GUN.steelLight);
+    gunStripes(36, 84, 40, 7, 3, GUN.steelLight);
+    gunRect(34, 146, 46, 9, GUN.creamDeep, false);
+    gunPoly([[64, 36], [78, 38], [82, 78], [68, 76]], GUN.cream);
+    gunRect(22, 172, 58, 14, GUN.steelDark);
+    gunRect(22, 172, 58, 4, GUN.accentDeep, false);
+
+    // Frame and dust cover.
+    gunPoly([[-252, 14], [20, 14], [44, 40], [44, 76], [-224, 72], [-256, 38]], gunGradient(-252, 14, -224, 72, [
+      [0, GUN.steelMid], [1, GUN.steelDark],
+    ]));
+    gunStripes(-24, 28, 36, 7, 3, GUN.steelLight);
+    gunPoly([[-256, 36], [40, 40], [40, 48], [-250, 44]], GUN.ink, false);
+
+    // Slide with cream panels and the red accent block.
+    gunPoly([[-266, -36], [-20, -36], [16, -14], [16, 16], [-250, 18], [-286, -6]], gunGradient(-266, -36, -250, 18, [
+      [0, GUN.steelHi], [0.35, GUN.steelMid], [1, GUN.steel],
+    ]));
+    gunPoly([[-266, -36], [-20, -36], [-22, -20], [-262, -20]], GUN.cream);
+    gunPoly([[-252, -32], [-40, -32], [-42, -26], [-250, -26]], GUN.creamDeep, false);
+    // Rear red receiver block and the forward chevron.
+    gunPoly([[-266, -36], [-186, -36], [-192, -20], [-262, -20]], GUN.accent);
+    gunPoly([[-186, -36], [-150, -36], [-156, -20], [-192, -20]], GUN.accentDeep);
+    gunPoly([[-150, -36], [-20, -36], [-22, -30], [-152, -30]], GUN.accent, false);
+    gunPoly([[-208, -30], [-176, -30], [-184, -18], [-198, -18]], 'rgba(20,26,30,.55)', false);
+    gunPoly([[-140, -34], [-128, -34], [-132, -22], [-144, -22]], 'rgba(20,26,30,.4)', false);
+    gunPoly([[-224, 0], [-4, 2], [0, 14], [-236, 12]], 'rgba(10,14,16,.3)', false);
+    gunLine(-140, 12, 12, 10, GUN.steelLight, 2);
+    // Muzzle and slide serrations.
+    gunPoly([[-296, -32], [-262, -34], [-262, -6], [-296, -4]], GUN.ink);
+    gunRect(-290, -28, 8, 20, GUN.steelDark, false);
+    gunRect(-276, -28, 8, 20, GUN.steelDark, false);
+    for (let i = 0; i < 4; i++) gunRect(-56 + i * 11, -26, 5, 36, 'rgba(8,11,13,.45)', false);
+    // Hammer and sights.
+    gunPoly([[-44, -36], [-18, -36], [-24, -58], [-46, -54]], GUN.steelDark);
+    gunPoly([[-262, -36], [-250, -36], [-250, -52], [-262, -52]], GUN.steelMid);
+    gunRect(-44, -44, 16, 8, GUN.steelLight, false);
+    // Trigger and guard.
+    ctx.strokeStyle = GUN.steelMid; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.moveTo(-4, 18); ctx.quadraticCurveTo(-40, 64, 14, 80); ctx.quadraticCurveTo(50, 86, 56, 58); ctx.stroke();
+    gunLine(10, 26, 26, 64, GUN.steelLight, 4);
+
+    // Trigger hand wrapped round the grip, thumb laid along the frame.
+    drawGripHand(44, 58, 1.05);
+
+    if (now > 0 && now < muzzleUntil) drawMuzzleFlash(-316, -20, 0.95);
+  }
+
+  // --- MARSHAL --------------------------------------------------------------
+  function drawMarshalView(motion) {
+    const now = motion.now;
+    drawSleeve(70, 132, 214, 306, 42);
+    drawSleeve(-388, 36, -250, 220, 34);
+    // Stock and cheek rest.
+    gunPoly([[96, -34], [232, -16], [262, 48], [192, 96], [102, 62]], gunGradient(96, -34, 110, 96, [
+      [0, GUN.woodLight], [0.5, GUN.wood], [1, GUN.woodDark],
+    ]));
+    gunPoly([[104, 62], [192, 96], [198, 108], [102, 74]], GUN.ink);
+    gunPoly([[126, -28], [214, -14], [220, 2], [130, -12]], 'rgba(255,240,210,.18)', false);
+    gunPoly([[148, 40], [214, 30], [206, 66], [150, 60]], GUN.creamDeep);
+
+    // Receiver.
+    gunPoly([[-300, -38], [108, -38], [138, 4], [126, 46], [-276, 42], [-314, 4]], gunGradient(-300, -38, -278, 42, [
+      [0, GUN.steelMid], [0.5, GUN.steel], [1, GUN.steelDark],
+    ]));
+    gunPoly([[-300, -38], [108, -38], [112, -28], [-292, -28]], GUN.steelLight);
+    gunPoly([[-266, -14], [76, -10], [84, 14], [-254, 20]], GUN.cream);
+    gunPoly([[-266, -14], [-184, -12], [-196, 22], [-254, 20]], GUN.accent);
+    gunLine(-146, 24, 74, 20, GUN.creamDeep, 2);
+    // Bolt handle.
+    gunPoly([[-308, -20], [-284, -20], [-284, 12], [-308, 12]], GUN.steelDark);
+    gunLine(-296, -8, -326, -28, GUN.steelLight, 8);
+    ctx.fillStyle = GUN.steelMid; ctx.beginPath(); ctx.arc(-330, -32, 9, 0, Math.PI * 2); ctx.fill();
+
+    // Pistol grip and trigger.
+    gunPoly([[-20, 30], [58, 36], [76, 130], [24, 148], [-18, 94]], gunGradient(-20, 30, 40, 148, [
+      [0, GUN.wood], [1, GUN.woodDark],
+    ]));
+    gunStripes(-6, 52, 48, 7, 3, GUN.woodLight);
+    gunStripes(-2, 70, 44, 7, 3, GUN.woodLight);
+    gunRect(-52, 144, 52, 13, GUN.steelDark);
+    ctx.strokeStyle = GUN.steelMid; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(-24, 34); ctx.quadraticCurveTo(-56, 76, 0, 90); ctx.quadraticCurveTo(38, 96, 44, 70); ctx.stroke();
+
+    // Wooden handguard first, then the barrel on top of it.
+    gunPoly([[-556, -46], [-310, -46], [-300, 22], [-548, 26]], gunGradient(-556, -46, -546, 26, [
+      [0, GUN.woodLight], [0.45, GUN.wood], [1, GUN.woodDark],
+    ]));
+    gunPoly([[-556, -46], [-310, -46], [-308, -38], [-554, -38]], '#8a6f4e', false);
+    for (let i = 0; i < 4; i++) {
+      gunPoly([[-520 + i * 52, -26], [-500 + i * 52, -26], [-494 + i * 52, 8], [-514 + i * 52, 8]], '#1a1510');
+    }
+    gunPoly([[-556, 12], [-306, 16], [-304, 24], [-552, 22]], GUN.steelDark, false);
+
+    // Barrel and muzzle brake.
+    gunPoly([[-700, -36], [-292, -40], [-292, -8], [-700, -10]], gunGradient(-700, -36, -292, -10, [
+      [0, GUN.steelDark], [0.4, GUN.steel], [0.75, GUN.steelMid], [1, GUN.steelDark],
+    ]));
+    gunPoly([[-700, -36], [-296, -40], [-296, -34], [-700, -30]], 'rgba(255,255,255,.18)', false);
+    for (let i = 0; i < 3; i++) gunRect(-652 + i * 88, -22, 54, 3, GUN.ink, false);
+    gunPoly([[-736, -44], [-696, -42], [-696, -4], [-736, -2]], GUN.ink);
+    gunRect(-724, -38, 8, 32, GUN.steelDark, false);
+    gunRect(-708, -38, 8, 32, GUN.steelDark, false);
+    gunPoly([[-736, -44], [-696, -42], [-696, -37], [-736, -39]], GUN.steelLight, false);
+
+    // Scope above everything: mounts, tube, objective bell, eyepiece, turrets.
+    gunPoly([[-246, -44], [-218, -44], [-218, -88], [-246, -88]], GUN.steelDark);
+    gunPoly([[-352, -44], [-324, -44], [-324, -88], [-352, -88]], GUN.steelDark);
+    gunPoly([[-392, -78], [-198, -78], [-194, -96], [-388, -96]], gunGradient(-392, -96, -372, -78, [
+      [0, GUN.steelMid], [0.45, GUN.steelLight], [1, GUN.steelDark],
+    ]));
+    gunPoly([[-384, -94], [-202, -94], [-202, -89], [-384, -89]], 'rgba(255,255,255,.24)', false);
+    // Objective bell toward the muzzle.
+    gunPoly([[-436, -74], [-388, -74], [-384, -108], [-442, -108]], GUN.steelMid);
+    ctx.fillStyle = '#0c2026'; ctx.beginPath(); ctx.ellipse(-433, -91, 12, 17, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(120,220,235,.8)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.ellipse(-433, -91, 12, 17, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = 'rgba(180,240,250,.5)'; ctx.beginPath(); ctx.ellipse(-437, -97, 4, 7, 0, 0, Math.PI * 2); ctx.fill();
+    // Eyepiece.
+    gunPoly([[-198, -76], [-164, -76], [-160, -98], [-196, -100]], GUN.steelMid);
+    ctx.fillStyle = '#0b1114'; ctx.beginPath(); ctx.ellipse(-168, -88, 11, 15, 0, 0, Math.PI * 2); ctx.fill();
+    // Turrets.
+    gunRect(-300, -110, 20, 16, GUN.steelDark);
+    gunRect(-294, -120, 9, 12, GUN.steelLight, false);
+    gunRect(-286, -104, 18, 10, GUN.steelDark, false);
+
+    // Trigger hand on the grip.
+    drawGripHand(20, 50, 1.02);
+    // Support hand under the wooden fore-end.
+    drawGripHand(-446, -6, 0.9);
+
+    if (now > 0 && now < muzzleUntil) drawMuzzleFlash(-770, -22, 1.45);
+    if (now > 0) drawShellCasing(-236, 0, now);
+  }
+
+  function weaponMotion(now, weapon) {
+    const moving = moveBlend;
+    const breathX = Math.sin(now * 0.00085) * 3.4 * dpr;
+    const breathY = Math.cos(now * 0.00115) * 2.6 * dpr;
+    const bobX = Math.sin(bob * 8) * moving * 7 * dpr;
+    const bobY = Math.abs(Math.cos(bob * 8)) * moving * 5 * dpr;
+    const kickAge = now - lastShot;
+    const kick = kickAge >= 0 && kickAge < 130 ? 1 - kickAge / 130 : 0;
+    const kickEase = kick * kick;
+    const recoilX = kickEase * 34 * dpr;
+    const recoilY = -kickEase * 9 * dpr;
+    const recoilTilt = -kickEase * 0.075;
+
+    let reloadT = 0, reloadDip = 0, reloadTilt = 0, magDrop = 0;
+    if (reloading) {
+      const total = Math.max(0.2, (weapon.reloadMs || 1200) / 1000);
+      reloadT = clamp(1 - reloadTimer / total, 0, 1);
+      reloadDip = Math.sin(reloadT * Math.PI) * 128 * dpr;
+      reloadTilt = Math.sin(reloadT * Math.PI) * 0.3;
+      const magWindow = clamp((reloadT - 0.12) / 0.34, 0, 1);
+      magDrop = Math.sin(magWindow * Math.PI) * 120 * dpr;
+      if (reloadT > 0.52) magDrop = (1 - clamp((reloadT - 0.52) / 0.22, 0, 1)) * 30 * dpr;
+    }
+    return {
+      now,
+      x: breathX + bobX + recoilX,
+      y: breathY + bobY + recoilY + reloadDip + (jump ? -jump * 30 * dpr : 0),
+      tilt: Math.sin(bob * 4) * moving * 0.012 + recoilTilt + reloadTilt,
+      magDrop,
+      reloadT,
+    };
+  }
+
+  function drawWeapon() {
+    if (!player.alive) return;
+    const weapon = WEAPONS[weaponIndex] || WEAPONS[1];
+    const view = VIEWMODELS[weapon.id] || VIEWMODELS.vandal;
+    const now = performance.now();
+    const motion = weaponMotion(now, weapon);
+    const scale = view.scale * clamp(viewH / 700, 0.58, 1.35) * clamp(viewW / 1120, 0.62, 1.15);
+    const originX = viewW * view.anchorX + motion.x;
+    const originY = viewH * view.anchorY + motion.y;
+    const rotation = view.rotation + motion.tilt;
+
+    ctx.save();
+    ctx.translate(originX, originY);
+    ctx.rotate(rotation);
+    ctx.scale(scale, scale);
+
+    // Dark rim under the silhouette so it separates from bright sandstone.
+    ctx.save();
+    ctx.translate(0, 9);
+    ctx.globalAlpha = 0.3;
+    if (weapon.id === 'classic') drawClassicView({ ...motion, now: -1 });
+    else if (weapon.id === 'marshal') drawMarshalView({ ...motion, now: -1 });
+    else drawVandalView({ ...motion, now: -1 });
+    ctx.restore();
+
+    if (weapon.id === 'classic') drawClassicView(motion);
+    else if (weapon.id === 'marshal') drawMarshalView(motion);
+    else drawVandalView(motion);
+    ctx.restore();
+
+    // Screen-space bloom around the muzzle while firing.
+    if (now < muzzleUntil) {
+      const cos = Math.cos(rotation), sin = Math.sin(rotation);
+      const mx = originX + (view.muzzle[0] * cos - view.muzzle[1] * sin) * scale;
+      const my = originY + (view.muzzle[0] * sin + view.muzzle[1] * cos) * scale;
+      const bloom = ctx.createRadialGradient(mx, my, 0, mx, my, 190 * dpr);
+      bloom.addColorStop(0, 'rgba(255,232,170,.2)');
+      bloom.addColorStop(0.4, 'rgba(255,190,110,.09)');
+      bloom.addColorStop(1, 'rgba(255,160,60,0)');
+      ctx.fillStyle = bloom;
+      ctx.fillRect(mx - 190 * dpr, my - 190 * dpr, 380 * dpr, 380 * dpr);
+    }
   }
 
   function moveActor(actor, targetX, targetY, dt, speed) {
@@ -728,6 +1236,7 @@
     $('weaponName').textContent = weapon.name;
     $('weaponType').innerHTML = `${weapon.type} <i>▴</i>`;
     updateAmmo();
+    paintWeaponIcons();
     if ($('buyCash')) $('buyCash').textContent = formatMoney(player.money);
     if (buyOpen) renderBuyMenu();
   }
@@ -834,10 +1343,99 @@
     feedback.classList.toggle('error', isError);
   }
 
-  function addBuyCard(container, { title, details, price, action, disabled = false, active = false, status = '' }) {
+  // Small side-profile silhouettes used in the HUD and armory cards.
+  function drawWeaponIcon(canvas, id, color = '#839078') {
+    if (!canvas || !canvas.getContext) return;
+    const iconCtx = canvas.getContext('2d');
+    if (!iconCtx) return;
+    const width = canvas.width, height = canvas.height;
+    iconCtx.clearRect(0, 0, width, height);
+    // All silhouettes are authored in a 640 x 220 box, muzzle pointing left.
+    const unit = Math.min(width / 660, height / 230);
+    iconCtx.save();
+    iconCtx.translate((width - 640 * unit) / 2, (height - 220 * unit) / 2);
+    iconCtx.scale(unit, unit);
+    iconCtx.fillStyle = color;
+    const poly = (points) => {
+      iconCtx.beginPath();
+      iconCtx.moveTo(points[0][0], points[0][1]);
+      for (let i = 1; i < points.length; i++) iconCtx.lineTo(points[i][0], points[i][1]);
+      iconCtx.closePath(); iconCtx.fill();
+    };
+    const box = (x, y, w, h) => iconCtx.fillRect(x, y, w, h);
+    if (id === 'classic') {
+      // Slide + frame.
+      poly([[64, 84], [404, 84], [430, 110], [428, 138], [86, 142], [40, 112]]);
+      // Grip.
+      poly([[300, 136], [386, 136], [420, 206], [346, 214], [286, 164]]);
+      // Trigger guard.
+      iconCtx.lineWidth = 12; iconCtx.strokeStyle = color; iconCtx.lineCap = 'round';
+      iconCtx.beginPath(); iconCtx.arc(246, 152, 26, 0.15 * Math.PI, 0.85 * Math.PI); iconCtx.stroke();
+      // Sights + muzzle detail.
+      box(96, 66, 16, 20); box(372, 70, 14, 16); box(40, 94, 30, 34);
+      // Grip texture.
+      iconCtx.fillStyle = 'rgba(9,14,13,.28)';
+      box(310, 156, 56, 8); box(318, 174, 52, 8);
+    } else if (id === 'marshal') {
+      // Stock + receiver.
+      poly([[430, 92], [560, 84], [586, 120], [546, 160], [434, 146]]);
+      poly([[92, 96], [446, 88], [470, 118], [462, 146], [96, 148]]);
+      // Pistol grip.
+      poly([[368, 142], [434, 140], [452, 208], [392, 214], [356, 168]]);
+      // Wooden fore-end (slightly stepped).
+      poly([[136, 92], [312, 86], [320, 122], [140, 130]]);
+      // Barrel + muzzle brake.
+      box(30, 100, 130, 20); box(0, 92, 40, 36);
+      // Scope.
+      box(196, 34, 150, 26);
+      box(212, 58, 20, 24); box(306, 58, 20, 24);
+      poly([[356, 40], [392, 40], [398, 66], [352, 66]]);
+      // Trigger guard.
+      iconCtx.lineWidth = 11; iconCtx.strokeStyle = color; iconCtx.lineCap = 'round';
+      iconCtx.beginPath(); iconCtx.arc(330, 156, 24, 0.1 * Math.PI, 0.8 * Math.PI); iconCtx.stroke();
+    } else {
+      // Stock.
+      poly([[452, 90], [576, 80], [600, 128], [548, 168], [456, 148]]);
+      // Receiver.
+      poly([[120, 88], [456, 84], [486, 118], [478, 150], [124, 156], [82, 124]]);
+      // Handguard + barrel + brake.
+      poly([[46, 96], [126, 92], [128, 150], [50, 154]]);
+      box(0, 104, 58, 24); box(-4, 98, 22, 38);
+      // Magazine (curved-ish).
+      poly([[196, 152], [286, 150], [312, 212], [238, 220], [186, 176]]);
+      // Pistol grip.
+      poly([[330, 150], [404, 148], [420, 208], [360, 214], [318, 172]]);
+      // Top rail, rear sight, charging handle.
+      box(130, 76, 310, 12);
+      box(300, 56, 22, 22);
+      box(120, 66, 60, 12);
+      // Magazine detail.
+      iconCtx.fillStyle = 'rgba(9,14,13,.28)';
+      box(206, 170, 62, 9); box(214, 188, 56, 9);
+    }
+    iconCtx.restore();
+  }
+
+  function paintWeaponIcons() {
+    const glyph = document.querySelector('.weapon-glyph');
+    if (glyph) drawWeaponIcon(glyph, (WEAPONS[weaponIndex] || WEAPONS[1]).id, '#9aa78c');
+    document.querySelectorAll('.buy-weapon-icon').forEach((icon) => {
+      drawWeaponIcon(icon, icon.dataset.weapon, '#c9d6bd');
+    });
+  }
+
+  function addBuyCard(container, { title, details, price, action, disabled = false, active = false, status = '', weaponId = '' }) {
     const card = document.createElement('article');
     card.className = `buy-card${active ? ' active' : ''}`;
     const copy = document.createElement('div');
+    if (weaponId) {
+      const icon = document.createElement('canvas');
+      icon.className = 'buy-weapon-icon';
+      icon.width = 96; icon.height = 40;
+      icon.dataset.weapon = weaponId;
+      card.classList.add('has-icon');
+      card.append(icon);
+    }
     const heading = document.createElement('h3'); heading.textContent = title;
     const description = document.createElement('p'); description.textContent = details;
     const priceLabel = document.createElement('span'); priceLabel.className = 'buy-price'; priceLabel.textContent = status || `PRICE ${formatMoney(price)}`;
@@ -863,6 +1461,7 @@
         price: weapon.price,
         active: isActive,
         status,
+        weaponId: weapon.id,
         disabled: !stock.owned && player.money < weapon.price,
         action: () => purchaseWeapon(index),
       });
@@ -877,6 +1476,7 @@
       disabled: armorOwned || player.money < ARMOR_PRICE,
       action: purchaseArmor,
     });
+    paintWeaponIcons();
   }
 
   async function purchaseWeapon(index) {
