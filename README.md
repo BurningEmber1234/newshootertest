@@ -29,6 +29,8 @@ The server binds to `0.0.0.0` so another device can join when it can reach the h
 - **Create Online Room** — start a network match and share the five-character room code.
 - **Join** — enter a room code from a match hosted on the same reachable server.
 
+In an online room, pressing **Esc** brings up the pause screen with the room code in large type and a **Copy Code** button, so you can read it out to a friend or paste it straight into chat. The same code stays visible in the corner of the in-game HUD.
+
 Online rooms are held in server memory and use same-origin JSON polling. Keep the Node server running for the full match. For players outside your local network, the host must make the server's port reachable (for example, by deploying the Node server or configuring a suitable network tunnel/port forward). Static hosting alone supports Quick Play, but not online rooms.
 
 You can use another port with `PORT=8080 npm run dev`.
