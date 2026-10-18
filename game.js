@@ -1654,12 +1654,20 @@
     updateVitals(); updateWeaponUI(); updateScoreboard(); updateObjective();
   }
 
+  function syncRoomUi() {
+    const code = onlineSession ? onlineSession.code : '';
+    $('roomHudTag').classList.toggle('hidden', !code);
+    $('roomHudTag').textContent = code ? `ROOM ${code}` : '';
+    $('pauseRoom').classList.toggle('hidden', !code);
+    $('pauseRoomCode').textContent = code || '-----';
+    $('pauseCopyButton').textContent = code ? 'COPY CODE' : '';
+  }
+
   function startMatch(mode = 'offline', initialSnapshot = null) {
     setupMatch(mode);
     playing = true; paused = false;
     menu.classList.add('hidden'); result.classList.add('hidden'); pause.classList.add('hidden'); hud.classList.remove('hidden');
-    $('roomHudTag').classList.toggle('hidden', !onlineSession);
-    $('roomHudTag').textContent = onlineSession ? `ROOM ${onlineSession.code}` : '';
+    syncRoomUi();
     setConnectionLabel(onlineSession ? 'ONLINE' : 'VS BOTS');
     if (onlineSession) {
       lastNetworkSuccess = performance.now(); lastNetworkSync = 0; networkInFlight = false;
@@ -1672,6 +1680,7 @@
   async function leaveOnlineRoom() {
     const session = onlineSession;
     onlineSession = null;
+    syncRoomUi();
     if (session) {
       try { await window.RiftNetwork.leave(session); } catch (_) { /* room may have expired */ }
     }
@@ -1763,6 +1772,22 @@
   function formatTime(seconds) {
     const minutes = Math.floor(seconds / 60), remainder = Math.floor(seconds % 60);
     return String(minutes).padStart(2, '0') + ':' + String(remainder).padStart(2, '0');
+  }
+
+  async function copyPauseCode() {
+    if (!onlineSession) return;
+    const label = $('pauseCopyButton'), code = $('pauseRoomCode');
+    label.textContent = 'COPIED';
+    try { await navigator.clipboard.writeText(`Join my RIFT room: ${onlineSession.code}`); }
+    catch (_) {
+      // Clipboard blocked (or no secure context): select the code so Ctrl+C still works.
+      try {
+        const range = document.createRange(); range.selectNodeContents(code);
+        const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+        label.textContent = 'SELECTED';
+      } catch (_) { /* leave the code on screen */ }
+    }
+    setTimeout(() => { label.textContent = 'COPY CODE'; }, 1400);
   }
 
   async function copyRoomCode() {
@@ -1869,6 +1894,7 @@
   }
 
   function requestPointer() {
+    if (paused) return;
     if (canvas.requestPointerLock && innerWidth > 720) {
       try {
         const lock = canvas.requestPointerLock();
@@ -1880,10 +1906,19 @@
   function togglePause() {
     if (!playing) return;
     paused = !paused;
+    if (paused) syncRoomUi();
     pause.classList.toggle('hidden', !paused);
     hud.classList.toggle('hidden', paused);
     if (paused) document.exitPointerLock?.();
     else { requestPointer(); lastTime = performance.now(); }
+  }
+
+  function resumeMatch() {
+    paused = false;
+    pause.classList.add('hidden');
+    hud.classList.remove('hidden');
+    requestPointer();
+    lastTime = performance.now();
   }
 
   $('playButton').addEventListener('click', quickPlay);
@@ -1895,7 +1930,8 @@
   $('teamCtButton').addEventListener('click', () => { chosenTeam = 'CT'; updateTeamSelection(); });
   $('teamTButton').addEventListener('click', () => { chosenTeam = 'T'; updateTeamSelection(); });
   $('againButton').addEventListener('click', () => gameMode === 'online' ? returnToMenu() : startMatch('offline'));
-  $('resumeButton').addEventListener('click', () => { paused = false; pause.classList.add('hidden'); hud.classList.remove('hidden'); requestPointer(); lastTime = performance.now(); });
+  $('resumeButton').addEventListener('click', resumeMatch);
+  $('pauseCopyButton').addEventListener('click', copyPauseCode);
   $('buyCloseButton').addEventListener('click', closeBuyMenu);
   $('leaderboardButton').addEventListener('click', () => leaderboardOpen ? closeLeaderboard() : openLeaderboard());
   $('leaderboardCloseButton').addEventListener('click', closeLeaderboard);
