@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#090d12" />
+  <title>RIFT//STRIKE — Tactical FPS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="game-shell">
+    <canvas id="game" aria-label="Rift Strike first-person tactical shooter game"></canvas>
+    <div class="scanlines" aria-hidden="true"></div>
+    <div class="vignette" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Rift Strike home"><span class="brand-mark">R</span><span>RIFT<span class="brand-slash">//</span>STRIKE</span></a>
+      <div class="top-center"><span class="live-dot"></span> LIVE FIRE <span class="top-divider">/</span> BOMB DEFUSAL</div>
+      <div class="top-right"><span class="ping-icon">⌁</span> 24 ms <span class="top-divider">|</span> <span id="clock">00:00</span></div>
+    </header>
+
+    <section class="menu-screen" id="menuScreen">
+      <div class="menu-copy">
+        <div class="eyebrow"><span class="eyebrow-line"></span> OPERATION 04 <span class="eyebrow-dot">·</span> DUSTLINE</div>
+        <h1>LOCK<br><span class="title-outline">&amp; LOAD.</span></h1>
+        <p class="menu-description">No backup. No second chances.<br>Clear the site and get out alive.</p>
+        <div class="menu-actions">
+          <button class="play-button" id="playButton"><span>DEPLOY</span><span class="button-arrow">↗</span></button>
+          <div class="mode-select"><span class="mode-label">MISSION</span><span class="mode-value">BOMB DEFUSAL <span class="mode-chevron">⌄</span></span></div>
+        </div>
+        <div class="menu-footer"><span><span class="keycap">W A S D</span> MOVE</span><span><span class="keycap">MOUSE</span> AIM</span><span><span class="keycap">LMB</span> FIRE</span></div>
+      </div>
+      <div class="menu-aside"><div class="intel-card"><div class="intel-head"><span>MISSION INTEL</span><span class="intel-status">CLASSIFIED</span></div><div class="intel-title">DUSTLINE<br>DEPOT</div><div class="intel-rule"></div><div class="intel-row"><span>THREAT LEVEL</span><b class="threat">HIGH</b></div><div class="intel-row"><span>HOSTILES</span><b>05 OPERATIVES</b></div><div class="intel-row"><span>LOADOUT</span><b>VANDAL · SIDEARM</b></div><div class="intel-footer"><span class="intel-cross">✳</span> STAY SHARP. TRUST NO ONE.</div></div><div class="map-label"><span class="map-pulse"></span> MAP PREVIEW <span class="map-name">01 / 04</span></div></div>
+      <div class="menu-bottom"><span>RIFT TACTICAL SYSTEMS <span class="muted">© 2025</span></span><span>TRAINING SIMULATION <span class="bottom-divider">/</span> BUILD 0.4.7</span></div>
+    </section>
+
+    <section class="hud hidden" id="hud">
+      <div class="hud-top-left"><div class="round-label">ROUND <b id="roundNum">01</b> <span class="round-slash">/</span> 05</div><div class="round-progress"><i></i><i></i><i></i><i></i><i></i></div></div>
+      <div class="objective"><span class="objective-icon">◈</span><div><b>ELIMINATE HOSTILES</b><small id="objectiveSub">SITE A · 5 ENEMIES REMAINING</small></div></div>
+      <div class="site-indicator"><span class="site-letter">A</span><span>SITE A</span><span class="site-dot"></span></div>
+      <div class="crosshair" id="crosshair"><i></i><i></i><i></i><i></i><b></b></div>
+      <div class="hit-marker" id="hitMarker">×</div>
+      <div class="damage-flash" id="damageFlash"></div>
+      <div class="toast" id="toast"></div>
+      <div class="kill-feed" id="killFeed"></div>
+      <div class="hud-bottom">
+        <div class="player-panel"><div class="player-icon">▰</div><div class="stat-block"><span>VITALS</span><div class="health-row"><b id="healthValue">100</b><div class="health-bar"><i id="healthBar"></i></div><small>HP</small></div></div><div class="panel-divider"></div><div class="stat-block armor-stat"><span>ARMOR</span><div class="health-row"><b id="armorValue">75</b><div class="armor-bar"><i></i></div><small>AP</small></div></div></div>
+        <div class="center-hint" id="centerHint"><span>W A S D</span> MOVE <span>SHIFT</span> SPRINT <span>SPACE</span> VAULT</div>
+        <div class="weapon-panel"><div class="weapon-info"><span class="weapon-name">VANDAL</span><span class="weapon-type">ASSAULT RIFLE <i>▴</i></span></div><div class="ammo"><b id="ammoValue">30</b><span>/</span><small id="reserveValue">90</small></div><div class="weapon-glyph">╱╱</div></div>
+      </div>
+      <div class="reload-indicator" id="reloadIndicator"><span class="reload-spinner">◌</span> RELOADING</div>
+      <div class="pause-hint">ESC <span>PAUSE</span></div>
+    </section>
+
+    <section class="result-screen hidden" id="resultScreen"><div class="result-tag" id="resultTag">MISSION COMPLETE</div><h2 id="resultTitle">SITE<br>SECURED.</h2><p id="resultText">All hostiles neutralized. Clean work, operator.</p><div class="result-stats"><div><span>ACCURACY</span><b id="accuracyResult">0%</b></div><div><span>HOSTILES</span><b id="killsResult">05 / 05</b></div><div><span>TIME</span><b id="timeResult">00:00</b></div></div><button class="play-button result-button" id="againButton"><span>RUN IT BACK</span><span class="button-arrow">↗</span></button></section>
+    <div class="pause-screen hidden" id="pauseScreen"><span class="eyebrow"><span class="eyebrow-line"></span> OPERATOR ON HOLD</span><h2>TAKE A<br><span class="title-outline">BREATHER.</span></h2><p>Press <span class="keycap">ESC</span> to get back in the fight.</p><button class="play-button" id="resumeButton"><span>RESUME</span><span class="button-arrow">↗</span></button></div>
+    <div class="footer-mark"><span class="footer-cross">✳</span> RIFT TACTICAL SYSTEMS</div>
+  </main>
+  <script src="./game.js"></script>
+</body>
+</html>
