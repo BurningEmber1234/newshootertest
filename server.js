@@ -80,7 +80,7 @@ function nextRoomCode() {
 function spawnAt(team, slot) {
   const spawns = level.spawns[team];
   const point = spawns[Math.max(0, Math.min(spawns.length - 1, slot))];
-  return { x: point[0], y: point[1], angle: team === 'CT' ? 0.15 : Math.PI + 0.15 };
+  return { x: point[0], y: point[1], angle: level.spawnFacing[team] ?? 0 };
 }
 
 function createWeaponStock(isHuman) {
@@ -154,7 +154,25 @@ function createBot(room, team, slot) {
   const squad = team === 'CT' ? 'SENTINEL' : 'RAIDER';
   const bot = actorBase(`bot-${crypto.randomUUID()}`, `${squad} ${String(slot + 1).padStart(2, '0')}`, team, spawn, false);
   bot.spawnSlot = slot;
+  bot.objective = slot % 2 === 0 ? 'A' : 'B';
+  bot.patrol = null;
+  bot.patrolRound = 0;
   return bot;
+}
+
+function patrolPoint(bot) {
+  // Split the squad across A and B instead of stacking on one lane.
+  const site = level.sites[bot.objective] || level.sites.A;
+  const slot = Number.isInteger(bot.spawnSlot) ? bot.spawnSlot : 0;
+  const angle = (slot * 2.399 + (bot.patrolRound || 0) * 1.37) % (Math.PI * 2);
+  const radius = 1.1 + ((slot + (bot.patrolRound || 0)) % 5) * 0.42;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const a = angle + attempt * 1.05;
+    const x = site.x + Math.cos(a) * radius;
+    const y = site.y + Math.sin(a) * radius;
+    if (!level.isSolid(x, y)) return [x, y];
+  }
+  return [site.x, site.y];
 }
 
 function reconcileBots(room) {
@@ -225,7 +243,7 @@ function publicActor(actor) {
 function snapshot(room, playerId, lastEventId = 0) {
   const you = room.players.get(playerId);
   return {
-    code: room.code, status: room.winner ? 'complete' : 'in-progress', map: 'DUSTLINE DEPOT',
+    code: room.code, status: room.winner ? 'complete' : 'in-progress', map: 'ASCENT',
     scoreLimit: SCORE_LIMIT, scores: room.scores, winner: room.winner,
     actors: roomActors(room).map(publicActor), you: you ? publicActor(you) : null,
     events: room.events.filter((event) => event.id > Number(lastEventId || 0)).slice(-40),
@@ -332,9 +350,18 @@ function tickRoom(room, now = Date.now()) {
     const { target, distance, visible } = chooseTarget(room, bot);
     if (!target) continue;
     const dx = target.x - bot.x, dy = target.y - bot.y;
-    bot.angle = Math.atan2(dy, dx);
+    let goalX = target.x, goalY = target.y;
+    if (!visible || distance > 9) {
+      if (!bot.patrol || Math.hypot(bot.patrol[0] - bot.x, bot.patrol[1] - bot.y) < 1.1) {
+        bot.patrolRound = (bot.patrolRound || 0) + 1;
+        bot.patrol = patrolPoint(bot);
+        if (Math.random() < 0.12) bot.objective = bot.objective === 'A' ? 'B' : 'A';
+      }
+      if (!visible) { goalX = bot.patrol[0]; goalY = bot.patrol[1]; }
+    }
+    bot.angle = Math.atan2(visible ? dy : goalY - bot.y, visible ? dx : goalX - bot.x);
     if (distance > 4.1 || !visible) {
-      const waypoint = level.nextWaypoint(bot.x, bot.y, target.x, target.y);
+      const waypoint = level.nextWaypoint(bot.x, bot.y, goalX, goalY);
       moveActor(bot, waypoint[0], waypoint[1], dt, 1.45);
     } else {
       const side = bot.orbitSign || 1;

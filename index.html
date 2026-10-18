@@ -24,9 +24,9 @@
 
     <section class="menu-screen" id="menuScreen">
       <div class="menu-copy">
-        <div class="eyebrow"><span class="eyebrow-line"></span> OPERATION 04 <span class="eyebrow-dot">·</span> DUSTLINE</div>
+        <div class="eyebrow"><span class="eyebrow-line"></span> OPERATION 05 <span class="eyebrow-dot">·</span> ASCENT</div>
         <h1>LOCK<br><span class="title-outline">&amp; LOAD.</span></h1>
-        <p class="menu-description">5v5 tactical combat. Choose a side, build your squad,<br>and take control of Dustline Depot.</p>
+        <p class="menu-description">5v5 tactical combat. Choose a side, build your squad,<br>and take control of Ascent.</p>
 
         <div class="team-picker" role="group" aria-label="Choose your team">
           <span class="field-label">CHOOSE A SIDE</span>
@@ -53,15 +53,15 @@
       <div class="menu-aside">
         <div class="intel-card">
           <div class="intel-head"><span>MISSION INTEL</span><span class="intel-status">LIVE OPERATION</span></div>
-          <div class="intel-title">DUSTLINE<br>DEPOT</div>
+          <div class="intel-title">ASCENT<br>CITY</div>
           <div class="intel-rule"></div>
           <div class="intel-row"><span>THREAT LEVEL</span><b class="threat">HIGH</b></div>
           <div class="intel-row"><span>SQUAD SIZE</span><b>5 VS 5</b></div>
           <div class="intel-row"><span>START CASH</span><b>$2,000 · VANDAL</b></div>
           <div class="intel-footer"><span class="intel-cross">✳</span> HOLD LANES. WATCH YOUR TEAM.</div>
         </div>
-        <div class="map-label"><span class="map-pulse"></span> DUSTLINE DEPOT <span class="map-name">A / B SITES</span></div>
-        <canvas class="map-preview" id="mapPreview" width="256" height="168" aria-label="Dustline Depot tactical map preview"></canvas>
+        <div class="map-label"><span class="map-pulse"></span> ASCENT · A / B SITES <span class="map-name">RIFTTOWN</span></div>
+        <canvas class="map-preview" id="mapPreview" width="416" height="354" aria-label="Ascent tactical map preview"></canvas>
       </div>
       <div class="menu-bottom"><span>RIFT TACTICAL SYSTEMS <span class="muted">© 2025</span></span><span>TRAINING SIMULATION <span class="bottom-divider">/</span> BUILD 0.6.0</span></div>
     </section>
@@ -72,7 +72,7 @@
       <div class="scoreboard" aria-label="Team score"><span class="score-team ct-team">CT</span><b id="ctScore">00</b><em>:</em><b id="tScore">00</b><span class="score-team t-team">T</span></div>
       <button class="leaderboard-trigger" id="leaderboardButton" type="button">▤ SCOREBOARD <kbd>TAB</kbd></button>
       <div class="minimap-wrap"><div class="minimap-head"><span>TACTICAL MAP</span><span id="teamLabel">CT SIDE</span></div><canvas id="minimap" width="168" height="168" aria-label="Live tactical map"></canvas><div class="minimap-legend"><span><i class="legend-ct"></i> CT</span><span><i class="legend-t"></i> T</span></div></div>
-      <div class="site-indicator"><span class="site-letter">A</span><span>SITE A</span><span class="site-dot"></span></div>
+      <div class="site-indicator"><span class="site-letter" id="siteLetter">A</span><span id="siteName">SITE A</span><span class="site-dot"></span></div>
       <div class="crosshair" id="crosshair"><i></i><i></i><i></i><i></i><b></b></div>
       <div class="hit-marker" id="hitMarker">×</div>
       <div class="damage-flash" id="damageFlash"></div>
@@ -102,7 +102,7 @@
       <button class="overlay-close" id="leaderboardCloseButton" type="button" aria-label="Close scoreboard">×</button>
     </section>
 
-    <section class="result-screen hidden" id="resultScreen"><div class="result-tag" id="resultTag">MATCH COMPLETE</div><h2 id="resultTitle">SITE<br>SECURED.</h2><p id="resultText">Your squad controlled the depot.</p><div class="result-stats"><div><span>ACCURACY</span><b id="accuracyResult">0%</b></div><div><span>ELIMS</span><b id="killsResult">00</b></div><div><span>TIME</span><b id="timeResult">00:00</b></div></div><button class="play-button result-button" id="againButton" type="button"><span>RUN IT BACK</span><span class="button-arrow">↗</span></button></section>
+    <section class="result-screen hidden" id="resultScreen"><div class="result-tag" id="resultTag">MATCH COMPLETE</div><h2 id="resultTitle">SITE<br>SECURED.</h2><p id="resultText">Your squad controlled Ascent.</p><div class="result-stats"><div><span>ACCURACY</span><b id="accuracyResult">0%</b></div><div><span>ELIMS</span><b id="killsResult">00</b></div><div><span>TIME</span><b id="timeResult">00:00</b></div></div><button class="play-button result-button" id="againButton" type="button"><span>RUN IT BACK</span><span class="button-arrow">↗</span></button></section>
     <div class="pause-screen hidden" id="pauseScreen"><span class="eyebrow"><span class="eyebrow-line"></span> OPERATOR ON HOLD</span><h2>TAKE A<br><span class="title-outline">BREATHER.</span></h2><p>Press <span class="keycap">ESC</span> to get back in the fight.</p><button class="play-button" id="resumeButton" type="button"><span>RESUME</span><span class="button-arrow">↗</span></button></div>
     <div class="footer-mark"><span class="footer-cross">✳</span> RIFT TACTICAL SYSTEMS</div>
   </main>
